@@ -3,7 +3,7 @@ num_epochs: 90
 eval_interval: 1
 inference_only: True
 exp_dir: "./exps/inference"
-resume: /cpfs01/user/zhanghanxue/segment-anything/exps/all_point_box_depth/0227-002210/checkpoint_88.pth
+resume: ./checkpoints/detany3d_ckpts/zero_shot_category_ckpt.pth
 resume_scheduler: False
 use_amp: False
 max_depth: 100
@@ -68,7 +68,7 @@ opt:
 
 model:
   type: 'vit_h'
-  checkpoint: '/cpfs01/user/zhanghanxue/segment-anything/sam_vit_h_4b8939.pth'
+  checkpoint: './checkpoints/sam_ckpts/sam_vit_h_4b8939.pth'
   pad: 896
   image_encoder:
     img_size: 1024

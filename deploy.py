@@ -53,7 +53,7 @@ my_sam_model.setup()
 my_sam_model.eval()
 sam_trans = ResizeLongestSide(cfg.model.pad)
 
-dino_model = load_model("/cpfs01/user/zhanghanxue/segment-anything/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", "/cpfs01/user/zhanghanxue/segment-anything/GroundingDINO/weights/groundingdino_swinb_cogcoor.pth")
+dino_model = load_model("GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", "GroundingDINO/weights/groundingdino_swinb_cogcoor.pth")
 dino_model.eval()
 BOX_TRESHOLD = 0.37
 TEXT_TRESHOLD = 0.25
