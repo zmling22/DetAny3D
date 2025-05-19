@@ -5,7 +5,7 @@ import torchvision
 import yaml
 import types
 
-from segment_anything.datasets.utils import *
+from detect_anything.datasets.utils import *
 from torchvision import transforms
 import cv2
 import numpy as np
@@ -272,51 +272,6 @@ def preprocess(data, cfg, device_id):
 
         target_dict.update(encode_gts(target_dict, cfg))
 
-def configure_opt_v1(cfg, model, train_loader):
-
-    param_list = list()
-    param_list_unidepth = list()
-
-    if cfg.unlock_all_backbone:
-        param_list += list(model.module.sam.image_encoder.parameters())
-        param_list += list(model.module.sam.mask_decoder.parameters())
-        param_list += list(model.module.sam.prompt_encoder.parameters())
-    else:
-        if cfg.tune_with_prompt:
-            param_list += list(model.module.sam.mask_decoder.transformer2.parameters())
-            param_list += list(model.module.sam.mask_decoder.zero_conv2d.parameters()) + list(model.module.sam.mask_decoder.out_zero_conv2d.parameters())
-            param_list += list(model.module.sam.mask_decoder.zero_conv2d_cam.parameters()) + list(model.module.sam.mask_decoder.zero_conv2d_metric.parameters())
-            param_list += list(model.module.sam.mask_decoder.bbox_head.parameters()) + list(model.module.sam.mask_decoder.box_token.parameters()) + list(model.module.sam.mask_decoder.box_token_3d.parameters()) + list(model.module.sam.mask_decoder.bbox_3d_depth_head.parameters()) + list(model.module.sam.mask_decoder.bbox_3d_dims_head.parameters()) + list(model.module.sam.mask_decoder.bbox_3d_alpha_cls_head.parameters()) + list(model.module.sam.mask_decoder.bbox_3d_center_head.parameters()) + list(model.module.sam.mask_decoder.bbox_3d_alpha_res_head.parameters())
-        if cfg.tune_with_depth:
-            param_list_unidepth += list(model.module.sam.image_encoder.depth_head.parameters()) 
-            if cfg.merge_dino_feature:
-                param_list_unidepth += list(
-                    model.module.sam.image_encoder.dino.parameters()
-                )
-                if cfg.add_dino_feature_to_sam_decoder:
-                    param_list += list(model.module.sam.mask_decoder.zero_conv2d_dino.parameters())
-                    param_list += list(model.module.sam.image_encoder.dino_neck.parameters())
-
-        if cfg.model.use_adapter:
-            param_list +=  list(model.module.sam.image_encoder.spm.parameters()) + list(model.module.sam.image_encoder.interactions.parameters()) \
-                + list(model.module.sam.image_encoder.up.parameters())
-    
-    optimizer = torch.optim.AdamW(param_list, lr=cfg.opt.learning_rate, weight_decay=cfg.opt.weight_decay)
-    if not cfg.unlock_all_backbone:
-        if cfg.model.add_cls_token:
-            optimizer.add_param_group({'params': model.module.sam.image_encoder.cls_token})
-        if cfg.model.use_adapter:
-            optimizer.add_param_group({'params': model.module.sam.image_encoder.level_embed})
-        optimizer.add_param_group({
-            'params': param_list_unidepth,
-            'lr': cfg.opt.unidepth_lr,  # 自定义学习率
-            'weight_decay': cfg.opt.unidepth_weight_decay,  # 自定义权重衰减
-        })
-    
-    scheduler =  torch.optim.lr_scheduler.CosineAnnealingLR(optimizer = optimizer,
-                                                        T_max =  cfg.num_epochs)
-    
-    return optimizer, scheduler
 
 def configure_opt_v3(cfg, model, train_loader):
 
@@ -326,34 +281,17 @@ def configure_opt_v3(cfg, model, train_loader):
     param_list += list(model.module.sam.mask_decoder.parameters())
     if cfg.tune_with_depth:
         param_list_unidepth += list(model.module.sam.image_encoder.depth_head.parameters()) 
-        if cfg.merge_dino_feature:
-            param_list_unidepth += list(
-                model.module.sam.image_encoder.dino.parameters()
-            )
-            if cfg.add_dino_feature_to_sam_decoder:
-                param_list += list(model.module.sam.mask_decoder.zero_conv2d_dino.parameters())
-                param_list += list(model.module.sam.image_encoder.dino_neck.parameters())
-
-    if cfg.model.use_adapter:
-        param_list +=  list(model.module.sam.image_encoder.spm.parameters()) + list(model.module.sam.image_encoder.interactions.parameters()) \
-            + list(model.module.sam.image_encoder.up.parameters())
-    if cfg.model.enable_dense_prompt:
-        param_list += list(model.module.dense_prompt_generator.parameters())
-
+        param_list_unidepth += list(
+            model.module.sam.image_encoder.dino.parameters()
+        )
+    param_list +=  list(model.module.sam.image_encoder.spm.parameters()) + list(model.module.sam.image_encoder.interactions.parameters()) \
+        + list(model.module.sam.image_encoder.up.parameters())
+    
     optimizer = torch.optim.AdamW(param_list, lr=cfg.opt.learning_rate, weight_decay=cfg.opt.weight_decay)
 
-    if cfg.model.add_cls_token:
-        optimizer.add_param_group({'params': model.module.sam.image_encoder.cls_token})
-    if cfg.model.use_adapter:
-        optimizer.add_param_group({'params': model.module.sam.image_encoder.level_embed})
-    if cfg.input_depth_prompt:
-        # optimizer.add_param_group({'params': model.module.depth_embedding.parameters()})
-        depth_param_list = list(model.module.depth_mapping_layer.parameters())
-        optimizer.add_param_group({
-            'params': depth_param_list,
-            'lr': cfg.opt.learning_rate * 10,
-            'weight_decay': 0,  
-        })
+    optimizer.add_param_group({'params': model.module.sam.image_encoder.cls_token})
+    optimizer.add_param_group({'params': model.module.sam.image_encoder.level_embed})
+    
     optimizer.add_param_group({
         'params': param_list_unidepth,
         'lr': cfg.opt.unidepth_lr,  # 自定义学习率
@@ -365,87 +303,7 @@ def configure_opt_v3(cfg, model, train_loader):
     
     return optimizer, scheduler
 
-def configure_opt_v4(cfg, model, train_loader):
 
-    param_list = list()
-    param_list_unidepth = list()
-    rotation_matrix_param_list = list()  # 存储 bbox_3d_rotation_matrix_out 的参数
-
-    # 遍历 mask_decoder 中的所有参数，分离 bbox_3d_rotation_matrix_out
-    for name, param in model.module.sam.mask_decoder.named_parameters():
-        if 'rotation_matrix' in name:  # 判断是否是 bbox_3d_rotation_matrix_out
-            rotation_matrix_param_list.append(param)  # 添加到 rotation matrix 参数列表
-        else:
-            param_list.append(param)  # 其他参数添加到 param_list
-
-    if cfg.tune_with_depth:
-        param_list_unidepth += list(model.module.sam.image_encoder.depth_head.parameters()) 
-        if cfg.merge_dino_feature:
-            param_list_unidepth += list(
-                model.module.sam.image_encoder.dino.parameters()
-            )
-
-    if cfg.model.use_adapter:
-        param_list +=  list(model.module.sam.image_encoder.spm.parameters()) + list(model.module.sam.image_encoder.interactions.parameters()) \
-            + list(model.module.sam.image_encoder.up.parameters())
-    
-    optimizer = torch.optim.AdamW(param_list, lr=cfg.opt.learning_rate, weight_decay=cfg.opt.weight_decay)
-    if cfg.model.add_cls_token:
-        optimizer.add_param_group({'params': model.module.sam.image_encoder.cls_token})
-    if cfg.model.use_adapter:
-        optimizer.add_param_group({'params': model.module.sam.image_encoder.level_embed})
-    optimizer.add_param_group({
-        'params': param_list_unidepth,
-        'lr': cfg.opt.unidepth_lr,  # 自定义学习率
-        'weight_decay': cfg.opt.unidepth_weight_decay,  # 自定义权重衰减
-    })
-    optimizer.add_param_group({
-        'params': rotation_matrix_param_list,
-        'lr': cfg.opt.rotation_matrix_lr,  # 自定义的学习率
-        'weight_decay': cfg.opt.rotation_matrix_weight_decay,  # 自定义的权重衰减
-    })
-
-    scheduler =  torch.optim.lr_scheduler.CosineAnnealingLR(optimizer = optimizer,
-                                                        T_max =  cfg.num_epochs)
-    
-    return optimizer, scheduler
-
-
-def configure_opt_v2(cfg, model, train_loader):
-
-    param_list = list()
-    param_list_unidepth = list()
-
-    param_list += list(model.module.sam.mask_decoder.parameters())
-    
-    if cfg.tune_with_depth:
-        param_list_unidepth += list(model.module.sam.image_encoder.depth_head.parameters()) 
-        if cfg.merge_dino_feature:
-            param_list_unidepth += list(
-                model.module.sam.image_encoder.dino.parameters()
-            )
-
-    if cfg.model.use_adapter:
-        param_list +=  list(model.module.sam.image_encoder.spm.parameters()) + list(model.module.sam.image_encoder.interactions.parameters()) \
-            + list(model.module.sam.image_encoder.up.parameters())
-    
-    optimizer = torch.optim.AdamW(param_list, lr=cfg.opt.learning_rate, weight_decay=cfg.opt.weight_decay)
-    
-    if cfg.model.add_cls_token:
-        optimizer.add_param_group({'params': model.module.sam.image_encoder.cls_token})
-    if cfg.model.use_adapter:
-        optimizer.add_param_group({'params': model.module.sam.image_encoder.level_embed})
-
-    optimizer.add_param_group({
-        'params': param_list_unidepth,
-        'lr': cfg.opt.unidepth_lr,  # 自定义学习率
-        'weight_decay': cfg.opt.unidepth_weight_decay,  # 自定义权重衰减
-    })
-
-    scheduler =  torch.optim.lr_scheduler.CosineAnnealingLR(optimizer = optimizer,
-                                                        T_max =  cfg.num_epochs)
-    
-    return optimizer, scheduler
 
 def save_checkpoint(state, save_path, filename):
     filename = os.path.join(save_path, filename)
@@ -728,18 +586,6 @@ def save_mask_images(pred_masks, iou_predictions, image_h, image_w, gt_bboxes_2d
             to_draw_masks = 255 * to_draw_masks.detach().cpu().numpy()
             cv2.imwrite(f'{save_root}/{to_save_file_name}_mask.jpg', to_draw_masks)
 
-# def visualize_2d_bbox_and_points(image, pred_center_2d, gt_center_2d, gt_bboxes, point_coords = None):
-#     """Visualize the GT 2D bbox and prompts."""
-#     # Draw GT bbox and points
-#     bbox_x1, bbox_y1, bbox_x2, bbox_y2 = gt_bboxes[i]
-#     coor = [(int(bbox_x1), int(bbox_y1)), (int(bbox_x2), int(bbox_y2))]
-#     cv2.rectangle(todo, coor[0], coor[1], (0, 0, 255), 2)
-
-#     # Draw points
-#     cv2.circle(todo, (int(point_coords[i, 0]), int(point_coords[i, 1])), 2, (0, 0, 255), 4)
-#     cv2.circle(todo, (int(pred_center_2d[i, 0] * cfg.model.pad), int(pred_center_2d[i, 1] * cfg.model.pad)), 
-#                2, (255, 0, 0), 4)
-#     cv2.circle(todo, (int(gt_center_2d[i, 0]), int(gt_center_2d[i, 1])), 2, (255, 255, 0), 4)
 def save_predicted_point_prompts(point_prompts, images, image_h, image_w):
     origin_img = torch.Tensor(
         [58.395, 57.12, 57.375]).view(-1, 1, 1) * images[0, :, :image_h, :image_w].squeeze(0).detach().cpu() + torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1)
