@@ -1,0 +1,29 @@
+vit_pad_mask: True
+model:
+  pad: 1024
+  
+dataset:
+  pixel_mean: [123.675, 116.28, 103.53]
+  pixel_std: [58.395, 57.12, 57.375]
+  
+  train:
+    kitti:
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 1.
+      pkl_path: '/cpfs01/user/zhanghanxue/segment-anything/data/kitti/kitti_data_train_detany3d_no_occlusion.pkl'
+  val:
+    kitti:
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 1.
+      pkl_path: "/cpfs01/user/zhanghanxue/segment-anything/data/kitti/kitti_data_train_detany3d_no_occlusion.pkl"
+    

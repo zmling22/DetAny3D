@@ -1,0 +1,281 @@
+batch_size: 10
+num_epochs: 50
+eval_interval: 5
+inference_only: False
+phi_loss_weight: 10
+
+pretrain_depth: False
+# pretrain_depth: '/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/detectany3D_huge/1025/1024-131923/checkpoint_1.pth'
+exp_dir: "detectany3D/debug"
+# resume: '/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/detectany3D_huge/1025/1024-131923/checkpoint_1.pth'
+resume: False
+
+tune_with_prompt: False
+inference_with_prompt: False
+tune_with_depth: True
+inference_with_depth: True
+
+provide_gt_intrinsics: False
+provide_gt_intrinsics_inference: False
+
+
+loss_list: ['depth_loss', 'intrinsic_loss', '3d_bbox_loss', '2d_bbox_loss']
+
+unlock_all_backbone: False
+zero_conv: True
+zero_conv_encoder: False
+additional_adapter: True
+teacher_model: False
+
+opt: 
+  learning_rate: 0.0001
+  min_learning_rate: 0.00000001
+  weight_decay: 0.000001
+  warmup_steps: 1000
+  
+model:
+  type: 'vit_h'
+  checkpoint: 'sam.pth'
+  pad: 448
+  image_encoder:
+    img_size: 1024
+    patch_size: 16
+    in_chans: 3
+    embed_dim: 1280
+    depth: 32
+    num_heads: 16
+    mlp_ratio: 4.0
+    out_chans: 256
+    qkv_bias: True
+    norm_layer: nn.LayerNorm
+    act_layer: nn.GELU
+    use_abs_pos: True
+    use_rel_pos: True
+    rel_pos_zero_init: True
+    window_size: 14
+    global_attn_indexes: [7, 15, 23, 31]
+  prompt_encoder:
+  mask_decoder:
+    num_multimask_outputs: 3
+  freeze:
+    image_encoder: False
+    prompt_encoder: False
+    mask_decoder: False
+  dpt: False
+  unidepth_head: True
+  use_adapter: True
+  add_cls_token: True
+  vit_pad_mask: True
+
+dataset:
+  pixel_mean: [123.675, 116.28, 103.53]
+  pixel_std: [58.395, 57.12, 57.375]
+  train:
+    cityscapes:
+      range:
+        begin: 0
+        end: -1
+        interval: 10
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 1.
+      dataDir: "/cpfs01/shared/opendrivelab/cityscapes3d/leftImg8bit/train"
+      pkl_path: "/cpfs01/shared/opendrivelab/cityscapes3d/cityscapes_for_dpt_train.pkl"
+
+    cityscapes_val:
+      range:
+        begin: 0
+        end: -1
+        interval: 10
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 1.
+      dataDir: "/cpfs01/shared/opendrivelab/cityscapes3d/leftImg8bit/train"
+      pkl_path: "/cpfs01/shared/opendrivelab/cityscapes3d/cityscapes_for_dpt_val.pkl"
+
+    waymo:
+      range:
+        begin: 0
+        end: -1
+        interval: 100
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 1.
+      dataDir: "/cpfs01/shared/opendrivelab/"
+      pkl_path: '/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/waymo/waymo_data_train_front.pkl'
+
+    drivingstereo_train:
+      range:
+        begin: 0
+        end: -1
+        interval: 100
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 255.
+      pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/drivingstereo_new/OpenDataLab___DrivingStereo/drivingstereo_train.pkl"
+
+    drivingstereo_test:
+      range:
+        begin: 0
+        end: -1
+        interval: 100
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 255.
+      pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/drivingstereo_new/OpenDataLab___DrivingStereo/drivingstereo_test.pkl"
+
+    taskonomy:
+      range:
+        begin: 0
+        end: -1
+        interval: 500
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 512.
+      pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/taskonomy/taskonomy_right_0904_522762.pkl"
+
+    scannetv1:
+      range:
+        begin: 0
+        end: -1
+        interval: 1000
+      max_distance: 5
+      min_distance: 0.01
+      metric_scale: 1000.
+      pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/ScanNet_formal_unzip/scannet_dataset_filtered.pkl"
+
+    A2D2_0:
+      range:
+        begin: 0
+        end: -1
+        interval: 10
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 1.
+      pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/A2D2/OpenDataLab___A2D2/a2d2_front_train0.pkl"
+    
+    # A2D2_1:
+    #   range:
+    #     begin: 0
+    #     end: -1
+    #     interval: 10
+    #   max_distance: 100
+    #   min_distance: 1
+    #   metric_scale: 1.
+    #   pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/A2D2/OpenDataLab___A2D2/a2d2_front_train1.pkl"
+
+    # A2D2_2:
+    #   range:
+    #     begin: 0
+    #     end: -1
+    #     interval: 10
+    #   max_distance: 100
+    #   min_distance: 1
+    #   metric_scale: 1.
+    #   pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/A2D2/OpenDataLab___A2D2/a2d2_front_train2.pkl"
+
+    # AV2_train:
+    #   range:
+    #     begin: 0
+    #     end: -1
+    #     interval: 100
+    #   max_distance: 80
+    #   min_distance: 1
+    #   metric_scale: 1.
+    #   pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/AV2/Av2_train_front3.pkl"
+
+    # AV2_val:
+    #   range:
+    #     begin: 0
+    #     end: -1
+    #     interval: 100
+    #   max_distance: 80
+    #   min_distance: 1
+    #   metric_scale: 1.
+    #   pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/AV2/Av2_val_front3.pkl"
+
+    # AV2_test:
+    #   range:
+    #     begin: 0
+    #     end: -1
+    #     interval: 100
+    #   max_distance: 80
+    #   min_distance: 1
+    #   metric_scale: 1.
+    #   pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/AV2/Av2_test_front3.pkl"
+
+    # train_dataset: [('cityscapes', 298), ('cityscapes_val', 50), ('waymo', 1981), ('drivingstereo_train', 1745), ('drivingstereo_test', 78), ('taskonomy', 1046), ('scannetv1', 2478), ('A2D2_0', 1569), ('A2D2_1', 2745), ('A2D2_2', 2224), ('AV2_train', 22419), ('AV2_val', 4793), ('AV2_test', 4804)]
+  val:
+    waymo:
+      range:
+        begin: 1
+        end: 2000
+        interval: 10
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 1.
+      dataDir: "/cpfs01/shared/opendrivelab/"
+      pkl_path: '/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/waymo/waymo_data_train_front.pkl'
+
+    cityscapes_val:
+      range:
+        begin: 0
+        end: -1
+        interval: 10
+      max_distance: 100
+      min_distance: 1
+      metric_scale: 1.
+      dataDir: "/cpfs01/shared/opendrivelab/cityscapes3d/leftImg8bit/train"
+      pkl_path: "/cpfs01/shared/opendrivelab/cityscapes3d/cityscapes_for_dpt_val.pkl"
+    
+    sunrgbd:
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 5
+      min_distance: 0.01
+      metric_scale: 10000.
+      dataDir: "/cpfs01/user/zhanghanxue/segment-anything/data/sunrgbd/OFFICIAL_SUNRGBD/sun-grbd"
+      pkl_path: "/cpfs01/shared/opendrivelab/sun-rgbd/sunrgbd_for_dpt_test.pkl"
+
+    nuscens_val:
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 50
+      min_distance: 1
+      metric_scale: 218.45
+      pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/nuscenes/nuscenes_val.pkl"
+
+    ibims:
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 5
+      min_distance: 0.1
+      metric_scale: 1310.72
+      pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/test_datasets/ibims/ibims_dataset.pkl"
+
+    middlebury:
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 5
+      min_distance: 0.1
+      metric_scale: 6553.5
+      pkl_path: "/cpfs01/shared/opendrivelab/opendrivelab_hdd/haoran/test_datasets/OpenDataLab___Middlebury_2014/middlebury_depth_dataset.pkl"
+
+    
+    kitti:
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 50
+      min_distance: 1
+      metric_scale: 1
+      pkl_path: "/cpfs01/shared/opendrivelab/anydet3d/data/kitti/kitti_data_val_detany3d.pkl"
