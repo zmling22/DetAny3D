@@ -180,7 +180,7 @@ def compute_3d_bbox_vertices(x, y, z, w, h, l, yaw, rotation_matrix=None):
             [-np.sin(yaw), 0, np.cos(yaw)]
         ])
     corners_rotated = corners @ R.T
-    # corners_rotated = np.zeros_like(corners_rotated)
+    
     corners_translated = corners_rotated + np.array([x, y, z])
 
     fore_plane_center = fore_plane_center @ R.T + np.array([x, y, z])
@@ -297,39 +297,6 @@ def compute_3d_bbox_vertices_batch(bboxes, rotation_matrices=None, device='cuda'
     corners_translated = corners_rotated + torch.cat([x, y, z], dim=1).unsqueeze(1)  # (batch_size, 8, 3)
 
     return corners_translated
-
-def add_bbox_related_perturbations(point_coords_tensor, bbox_2d_tensor, perturbation_factor=0.05, num_pertuerbated_points = 1):
-    """
-    Add perturbations to the input coordinates and bounding boxes based on the size of the 2D bounding boxes.
-    
-    Args:
-    - input_dict (dict): A dictionary containing 'point_coords' (and optionally 'boxes_coords').
-    - bbox_2d_tensor (Tensor): The ground truth 2D bounding boxes (x_min, y_min, x_max, y_max).
-    - perturbation_factor (float): The factor that controls the size of the perturbation. Default is 0.05.
-    - device_id (optional): The device to transfer the tensors to (e.g., 'cuda', 'cpu').
-    
-    Returns:
-    - input_dict (dict): The updated dictionary with perturbed coordinates.
-    """
-    # Ensure bbox dimensions are of float type (this avoids the error with `torch.randn_like`)
-    # import ipdb; ipdb.set_trace()
-    bbox_2d_tensor = bbox_2d_tensor.to(point_coords_tensor.dtype)
-
-    # Calculate the width and height of 2D bounding boxes
-    bbox_width = bbox_2d_tensor[2] - bbox_2d_tensor[0]
-    bbox_height = bbox_2d_tensor[3] - bbox_2d_tensor[1]
-
-    bbox_width = bbox_width.repeat(num_pertuerbated_points)
-    bbox_height = bbox_height.repeat(num_pertuerbated_points)
-    
-    # Generate random perturbations based on bbox dimensions (ensure they are float)
-    perturbation_x = torch.randn_like(bbox_width) * bbox_width * perturbation_factor
-    perturbation_y = torch.randn_like(bbox_height) * bbox_height * perturbation_factor
-    point_coords_tensor = point_coords_tensor.repeat(num_pertuerbated_points, 1)
-    # Add the perturbations to the point coordinates
-    perturbed_point_coords = point_coords_tensor + torch.stack([perturbation_x, perturbation_y], dim=-1)
-
-    return perturbed_point_coords
 
 def so3_relative_angle(
     R1: torch.Tensor,

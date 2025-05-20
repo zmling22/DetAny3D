@@ -1,15 +1,15 @@
 batch_size: 1
-num_epochs: 90
+num_epochs: 94
 eval_interval: 1
 inference_only: True
 exp_dir: "./exps/inference"
-resume: ./checkpoints/detany3d_ckpts/zero_shot_category_ckpt.pth
+resume: ./checkpoints/detany3d_ckpts/other_exp_ckpt.pth
 resume_scheduler: False
 use_amp: False
 max_depth: 100
 
-add_cubercnn_for_ap_inference: False
-output_json_file: tab1_9dof
+add_cubercnn_for_ap_inference: True
+output_json_file: output_results
 
 tune_with_prompt: True
 inference_with_prompt: True
@@ -132,7 +132,49 @@ dataset:
       pkl_path: './data/pkls/omni3d23daw/KITTI_train.pkl'
 
   val:
+    # cityscapes:
+    #   # xywl_mode: True
+    #   range:
+    #     begin: 0
+    #     end: -1
+    #     interval: 1
+    #   max_distance: 100
+    #   min_distance: 1
+    #   metric_scale: 1.
+    #   pkl_path: ./data/pkls/omni3d23daw/Cityscapes3D_test.pkl
+    # waymo:
+    #   range:
+    #     begin: 0 
+    #     end: -1
+    #     interval: 1
+    #   max_distance: 100
+    #   min_distance: 1
+    #   metric_scale: 1.
+    #   pkl_path: ./data/pkls/omni3d23daw/waymo_test.pkl
+    nuscenes:
+      xywl_mode: True
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 100
+      min_distance: 0.1
+      metric_scale: 218.45
+      pkl_path: ./data/pkls/cubercnn2pred/nuScenes_test.pkl
+     
+    hypersim:
+      xywl_mode: True
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 35
+      min_distance: 0.01
+      metric_scale: 1.
+      pkl_path: ./data/pkls/cubercnn2pred/Hypersim_test.pkl
+
     kitti:
+      xywl_mode: True
       range:
         begin: 0
         end: -1
@@ -140,4 +182,40 @@ dataset:
       max_distance: 100
       min_distance: 0.1
       metric_scale: 1.
-      pkl_path: './data/pkls/omni3d23daw/KITTI_test.pkl'
+      pkl_path: ./data/pkls/cubercnn2pred/KITTI_test.pkl
+
+
+    sunrgbd:
+      xywl_mode: True
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 5
+      min_distance: 0.01
+      metric_scale: 10000.
+      pkl_path: ./data/pkls/cubercnn2pred/SUNRGBD_test.pkl
+
+    objectron:
+      xywl_mode: True
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 5
+      min_distance: 0.01
+      metric_scale: 1
+      pkl_path: ./data/pkls/cubercnn2pred/Objectron_test.pkl
+
+    arkitscenes:
+      xywl_mode: True
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 5
+      min_distance: 0.01
+      metric_scale: 1
+      pkl_path: ./data/pkls/cubercnn2pred/ARKitScenes_test.pkl
+
+    

@@ -1,4 +1,4 @@
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import torch
 
 import torch.nn.functional as F
@@ -17,15 +17,14 @@ import matplotlib
 import os
 import json
 import math
-from pyquaternion import Quaternion
 import random
 import h5py
 
-from groundingdino.util.inference import load_model, load_image, predict, annotate
+from groundingdino.util.inference import load_model, load_image, predict
 from torchvision.ops import box_convert
 
 
-class Stage2Dataset(Dataset):
+class DetAny3DDataset(Dataset):
 
     def __init__(self, 
                  cfg,
@@ -73,20 +72,6 @@ class Stage2Dataset(Dataset):
             self.TEXT_TRESHOLD = 0.25
         with open('/cpfs01/user/zhanghanxue/segment-anything/data/category_meta.json', 'r') as f:
             self.category_id = json.load(f)
-        if self.cfg.dataset.dino_oracle_input:
-            if self.cfg.inference_basic:
-                with open(f'/cpfs01/user/zhanghanxue/omni3d/datasets/Omni3D/gdino_{dataset_name}_base_oracle_2d.json', 'r') as f:
-                    self.oracle_2d = json.load(f)
-            elif self.cfg.inference_novel:
-                with open(f'/cpfs01/user/zhanghanxue/omni3d/datasets/Omni3D/gdino_{dataset_name}_novel_oracle_2d.json', 'r') as f:
-                    self.oracle_2d = json.load(f)
-            else:
-                raise NotImplementedError('no inference mode yet')
-            self.imageid2oracleindex = {}
-            for i, item in enumerate(self.oracle_2d):
-                self.imageid2oracleindex[item['image_id']] = i
-        if self.cfg.dataset.generate_dino_oracle_list:
-            self.dino_oracle_list = []
 
 
     def _load_single_dataset(self, dataset_name, dataset_info):
@@ -157,45 +142,29 @@ class Stage2Dataset(Dataset):
         return depth
 
     def __getitem__(self, index):
-        # import ipdb;ipdb.set_trace()
+
         idx, true_index = self._get_relative_index(index)
         pkl_now = self.pkl_list[idx]
         dataset_name = self.dataset_name_list[idx]
-        if dataset_name == 'coco':
-            return self.get_coco_item(true_index, pkl_now, dataset_name)
-        
         
         instance = pkl_now[true_index]
         K = instance['K'].astype(np.float32)
         K = torch.tensor(K)
 
-        
-        
         img_path = instance['img_path']
+
         if self.cfg.dataset.hack_img_path:
             img_path = self.cfg.dataset.hack_img_path
         if not os.path.exists(img_path):
             print(f"img_path {img_path} not exists")
             return self.__getitem__(random.randint(0, self.idx_cum[-1]-1)) 
-        # print(img_path)
+
         todo_img = cv2.imread(img_path)
         if 'A2D2' in dataset_name:
             todo_img = undistort_image(todo_img, 'front_center', self.A2D2_config)
+        
         todo_img = cv2.cvtColor(todo_img, cv2.COLOR_BGR2RGB)
         original_size = tuple(todo_img.shape[:-1])
-
-        if self.cfg.dataset.generate_dino_oracle_list:
-            sample={}
-            if len(instance['obj_list']) == 0:
-                sample['image_id'] = self.dino_oracle_list[-1]['image_id'] + 1
-            else:
-                sample['image_id'] = instance['obj_list'][0]['image_id']
-            # sample['image_id'] = instance['obj_list'][0]['image_id']
-            sample['K'] = instance['K'][0].tolist()
-            sample['width'] = original_size[1]
-            sample['height'] = original_size[0]
-            # import ipdb;ipdb.set_trace()
-            sample['instances'] = []
 
         depth_path = instance['depth_path']
         
@@ -204,11 +173,11 @@ class Stage2Dataset(Dataset):
         depth = self._load_depth(depth_path, dataset_name, todo_img)
         
         img, depth = self.transform(todo_img, depth)
-        # import ipdb;ipdb.set_trace()
+        
         cropped_size = tuple(img.shape[1:3])
         cropped_blank_H = int((original_size[0] - cropped_size[0]) / 2)
         cropped_blank_W = int((original_size[1] - cropped_size[1]) / 2)
-        # import ipdb;ipdb.set_trace()
+        
         # bx, by will change if cropped
         K[0, 0, 2] = K[0, 0, 2] - cropped_blank_W
         K[0, 1, 2] = K[0, 1, 2] - cropped_blank_H
@@ -225,7 +194,6 @@ class Stage2Dataset(Dataset):
         K[0, 1] = K[0, 1] * resize_ratio
 
         depth = self.sam_trans.apply_depth_torch(depth.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
-
        
         # insure the short edge is divisible by 112
         before_crop_size = tuple(img.shape[2:])
@@ -235,12 +203,9 @@ class Stage2Dataset(Dataset):
         raw_image = img.clone().squeeze(0)
         # nomalize and pad for sam
         img_for_sam = self.preprocess(img).squeeze(0)
-        # import ipdb;ipdb.set_trace()
-        if self.mode == 'val' and self.cfg.dataset.dino_as_input:
-            prepare_for_dsam = self.generate_dino_list(img_path, instance, K, before_pad_size, original_size, raw_image, dataset_name, sample=sample if self.cfg.dataset.generate_dino_oracle_list else None)
-        elif self.mode == 'val' and self.cfg.dataset.dino_oracle_input:
-            prepare_for_dsam = self.generate_oracle_list(instance, K, before_pad_size, original_size, raw_image, dataset_name)
 
+        if self.mode == 'val' and self.cfg.dataset.dino_as_input:
+            prepare_for_dsam = self.generate_dino_list(img_path, instance, K, before_pad_size, original_size, raw_image, dataset_name)
         else:
             # generate data for object detection
             if 'obj_list' in instance.keys():
@@ -250,8 +215,7 @@ class Stage2Dataset(Dataset):
                 if len(prepare_for_dsam) == 0:
                     print(img_path)
                     print('Warning: no valid object detected, return another sample')
-                    
-                    # return self.__getitem__(random.randint(0, self.idx_cum[-1]-1))
+
                     prepare_for_dsam = []
             else:
                 prepare_for_dsam = []
@@ -275,8 +239,6 @@ class Stage2Dataset(Dataset):
             "K": K.squeeze(0),
             "depth": depth_padded,
             "before_pad_size": torch.Tensor(before_pad_size),
-
-            # stage2 related params here
             "prepare_for_dsam": prepare_for_dsam,
             "original_size": torch.tensor(original_size),
 
@@ -288,164 +250,14 @@ class Stage2Dataset(Dataset):
         return_dict.update({
             # input for dino
             "image_for_dino": img_for_dino,})
-        # import ipdb;ipdb.set_trace()
-        if self.cfg.dataset.generate_dino_oracle_list and index == self.idx_cum - 1:
-            # import ipdb;ipdb.set_trace()
-            self.dino_oracle_list = sorted(self.dino_oracle_list, key=lambda x: x['image_id'])
-            with open('gdino_waymo_base_oracle_2d.json', 'w') as f:
-                json.dump(self.dino_oracle_list.copy(), f, indent=4)
 
         return return_dict
 
     def __len__(self):
         return self.idx_cum[-1]
     
-    def get_coco_item(self, index, pkl, dataset_name = 'coco'):
-        assert dataset_name == 'coco', 'dataset_name must be coco'
-        anns = pkl[index]['anns_all_img']
-        mask_all_image = self.coco.annlistToMask(anns)
-
-        img_path = pkl[index]['img_path']
-        todo_img = cv2.imread(img_path)
-        todo_img = cv2.cvtColor(todo_img, cv2.COLOR_BGR2RGB)
-        original_size = tuple(todo_img.shape[:-1])
-
-        K = np.array([[[2 * original_size[0], 0, original_size[1] / 2],
-                        [0, 2 * original_size[0], original_size[0] / 2],
-                        [0, 0, 1]]]).astype(np.float32)
-
-        K = torch.tensor(K)
-
-        depth = self._load_depth(None, dataset_name, todo_img)
-
-        img, depth = self.transform(todo_img, depth)
-
-        cropped_size = tuple(img.shape[1:3])
-        cropped_blank_H = int((original_size[0] - cropped_size[0]) / 2)
-        cropped_blank_W = int((original_size[1] - cropped_size[1]) / 2)
-
-        K[0, 0, 2] = K[0, 0, 2] - cropped_blank_W
-        K[0, 1, 2] = K[0, 1, 2] - cropped_blank_H
-        
-
-        img = img.unsqueeze(0)
-        img = self.sam_trans.apply_image_torch(img)
-
-        before_pad_size = tuple(img.shape[-2:])
-        resize_ratio = before_pad_size[1] / cropped_size[1]
-
-        K[0, 0] = K[0, 0] * resize_ratio
-        K[0, 1] = K[0, 1] * resize_ratio
-
-        depth = self.sam_trans.apply_depth_torch(depth.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
-
-        # insure the short edge is divisible by 112
-        img, depth, K = self.crop_hw(img, depth, K)
-        before_pad_size = tuple(img.shape[2:])
-
-        raw_image = img.clone().squeeze(0)
-        img_for_sam = self.preprocess(img).squeeze(0)
-        prepare_for_dsam = []
-        if random.random() < 0.8:
-            two_point_prompt = False
-        else:
-            two_point_prompt = True
-        for ann in anns:
-            if ann['iscrowd'] == 1:
-                continue
-            
-            mask = self.coco.annToMask(ann)
-            seg_mask = torch.tensor(mask).to(torch.float32)
-            seg_mask = self.sam_trans.apply_mask_torch(seg_mask.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
-            mask_positions = np.argwhere(mask == 1)
-            if len(mask_positions) == 0:
-                continue
-            selected_positions = mask_positions[np.random.choice(mask_positions.shape[0], self.cfg.dataset.num_point_prompts if self.mode == 'train' else 1, replace=True)]
-            selected_positions = [[pos[1], pos[0]] for pos in selected_positions]
-            point_coords_tensor = torch.tensor(selected_positions, dtype=torch.int)
-            point_coords_tensor = self.sam_trans.apply_coords_torch(point_coords_tensor, original_size).to(torch.int)
-
-            if two_point_prompt and self.mode == 'train':
-                if point_coords_tensor.shape[0] > 1:
-                    tmp_point_coords_list = [point_coords_tensor[i:i+2, ...] for i in range(point_coords_tensor.shape[0] // 2)]
-                else:
-                    tmp_point_coords_list = [point_coords_tensor.repeat(2, 1)]
-            else:
-                tmp_point_coords_list = [point_coords_tensor[i:i+1, ...] for i in range(point_coords_tensor.shape[0])] 
-            bbox_2d_tensor = torch.tensor(ann['bbox'])
-            bbox_2d_tensor[2] = bbox_2d_tensor[0] + bbox_2d_tensor[2]
-            bbox_2d_tensor[3] = bbox_2d_tensor[1] + bbox_2d_tensor[3]
-            bbox_2d_tensor = self.sam_trans.apply_boxes_torch(bbox_2d_tensor, original_size).to(torch.int).squeeze(0)
-            if bbox_2d_tensor[2] - bbox_2d_tensor[0] < 5 or bbox_2d_tensor[3] - bbox_2d_tensor[1] < 5:
-                # print('a potential risk of bbox size')
-                continue
-            if bbox_2d_tensor[3] - bbox_2d_tensor[1] < 0.0625 * before_pad_size[0]:
-                # print('a potential risk of bbox size')
-                continue
-
-            if self.cfg.dataset.perturbation_box_prompt and self.mode == 'train':
-                box_coords = self.apply_bbox_perturbation(bbox_2d_tensor, before_pad_size)
-            else:
-                box_coords = bbox_2d_tensor.clone()
-            
-            
-            for coord in tmp_point_coords_list:
-                todo_dict = {
-                    "bbox_2d": bbox_2d_tensor,
-                    "point_coords": coord,
-                    "boxes_coords": box_coords,
-                    "bbox_3d": torch.tensor([-1, -1, -1, -1, -1, -1, -1]),
-                    "center_2d": torch.tensor([-1, -1]),
-                    "instance_id": ann['id'],
-                    "instance_mask": seg_mask,
-                    }
-                if self.cfg.output_rotation_matrix:
-                    todo_dict['rotation_pose'] = torch.eye(3)
-                
-                prepare_for_dsam.append(
-                    todo_dict
-                )
-
-        if len(prepare_for_dsam) == 0:
-            print(img_path)
-            print('Warning: no valid object detected, return another sample')
-            return self.__getitem__(random.randint(0, self.idx_cum[-1]-1))
-        
-        if len(prepare_for_dsam) > 50:
-            prepare_for_dsam = prepare_for_dsam[:50]
-        
-        if self.cfg.model.vit_pad_mask:
-            vit_pad_size = (before_pad_size[0] // self.cfg.model.image_encoder.patch_size, before_pad_size[1] // self.cfg.model.image_encoder.patch_size)
-        else:
-            vit_pad_size = (self.cfg.model.pad // self.cfg.model.image_encoder.patch_size, self.cfg.model.pad // self.cfg.model.image_encoder.patch_size)
-        
-        # padding depth
-        depth_padded, depth_mask_padded = self.process_depth(img_for_sam, depth, before_pad_size, dataset_name)
-
-        return_dict = {
-            "images": img_for_sam,
-            "masks": depth_mask_padded,
-            'vit_pad_size': torch.tensor(vit_pad_size),
-            "K": K.squeeze(0) if K is not None else None,
-            "depth": depth_padded,
-            "before_pad_size": torch.Tensor(before_pad_size),
-
-            # stage2 related params here
-            "prepare_for_dsam": prepare_for_dsam,
-
-        }
-
-        # post process image for dino, without padding
-        img_for_dino = self.preprocess_dino(img).squeeze(0)
-
-        return_dict.update({
-            # input for dino
-            "image_for_dino": img_for_dino,})
-    
-        return return_dict
-    
     def generate_obj_list(self, instance, K, before_pad_size, original_size, raw_image, dataset_name):
-        # import ipdb;ipdb.set_trace()
+        
         prepare_for_dsam = []
         for obj in instance['obj_list']:
                 
@@ -476,7 +288,6 @@ class Stage2Dataset(Dataset):
                     max_x = max(intersection_coords[:, 0])
                     max_y = max(intersection_coords[:, 1])
                 else:
-                    # print('a potential risk of out bbox')
                     continue
 
                 bbox_2d_polygon = [min_x, min_y, max_x, max_y]
@@ -498,10 +309,6 @@ class Stage2Dataset(Dataset):
             if yaw < -np.pi:
                 yaw = yaw + 2 * np.pi
                 
-            # # temp
-            # if 'A2D2' in dataset_name:
-            #     import ipdb;ipdb.set_trace()
-            #     yaw = yaw + np.pi
             bbox_3d = [x, y, z, w, h, l, yaw]
             bbox_3d_tensor = torch.tensor(bbox_3d)
 
@@ -514,7 +321,7 @@ class Stage2Dataset(Dataset):
                 bbox_2d_tensor = torch.tensor(self.cfg.dataset.hack_box_prompt)
             
             if self.cfg.dataset.perturbation_point_prompt and self.mode == 'train':
-                point_coords_tensor = add_bbox_related_perturbations(point_coords_tensor, bbox_2d_tensor, perturbation_factor=self.cfg.dataset.perturbation_factor, num_pertuerbated_points = self.cfg.dataset.num_point_prompts)
+                point_coords_tensor = self.add_bbox_related_perturbations(point_coords_tensor, bbox_2d_tensor, perturbation_factor=self.cfg.dataset.perturbation_factor, num_pertuerbated_points = self.cfg.dataset.num_point_prompts)
 
             if self.cfg.dataset.perturbation_box_prompt and self.mode == 'train':
                 box_coords = self.apply_bbox_perturbation(bbox_2d_tensor, before_pad_size)
@@ -522,7 +329,6 @@ class Stage2Dataset(Dataset):
                 box_coords = bbox_2d_tensor.clone()
             
             if self.cfg.dataset.generate_point_prompts_via_mask:
-                # import ipdb;ipdb.set_trace()
                 instance_id = dataset_name + "_" + str(obj['instance_id'])
                 mask_path = f'exps/masks/{self.mode}/{instance_id}_mask.jpg'
 
@@ -848,7 +654,40 @@ class Stage2Dataset(Dataset):
         # Return the perturbed bbox
         return torch.tensor([x1_perturbed, y1_perturbed, x2_perturbed, y2_perturbed])
 
-    def generate_dino_list(self, img_path, instance, K, before_pad_size, original_size, raw_image, dataset_name, sample=None):
+    def add_bbox_related_perturbations(self, point_coords_tensor, bbox_2d_tensor, perturbation_factor=0.05, num_pertuerbated_points = 1):
+        """
+        Add perturbations to the input coordinates and bounding boxes based on the size of the 2D bounding boxes.
+        
+        Args:
+        - input_dict (dict): A dictionary containing 'point_coords' (and optionally 'boxes_coords').
+        - bbox_2d_tensor (Tensor): The ground truth 2D bounding boxes (x_min, y_min, x_max, y_max).
+        - perturbation_factor (float): The factor that controls the size of the perturbation. Default is 0.05.
+        - device_id (optional): The device to transfer the tensors to (e.g., 'cuda', 'cpu').
+        
+        Returns:
+        - input_dict (dict): The updated dictionary with perturbed coordinates.
+        """
+        # Ensure bbox dimensions are of float type (this avoids the error with `torch.randn_like`)
+        # import ipdb; ipdb.set_trace()
+        bbox_2d_tensor = bbox_2d_tensor.to(point_coords_tensor.dtype)
+
+        # Calculate the width and height of 2D bounding boxes
+        bbox_width = bbox_2d_tensor[2] - bbox_2d_tensor[0]
+        bbox_height = bbox_2d_tensor[3] - bbox_2d_tensor[1]
+
+        bbox_width = bbox_width.repeat(num_pertuerbated_points)
+        bbox_height = bbox_height.repeat(num_pertuerbated_points)
+        
+        # Generate random perturbations based on bbox dimensions (ensure they are float)
+        perturbation_x = torch.randn_like(bbox_width) * bbox_width * perturbation_factor
+        perturbation_y = torch.randn_like(bbox_height) * bbox_height * perturbation_factor
+        point_coords_tensor = point_coords_tensor.repeat(num_pertuerbated_points, 1)
+        # Add the perturbations to the point coordinates
+        perturbed_point_coords = point_coords_tensor + torch.stack([perturbation_x, perturbation_y], dim=-1)
+
+        return perturbed_point_coords
+
+    def generate_dino_list(self, img_path, instance, K, before_pad_size, original_size, raw_image, dataset_name):
         TEXT_PROMPT = ''
         if 'kitti' in dataset_name:
             if self.cfg.inference_basic:
@@ -932,18 +771,6 @@ class Stage2Dataset(Dataset):
         for i, box in enumerate(xyxy):
             if phrases[i] == '' or phrases[i] not in check_label:
                 continue
-            if sample is not None:
-                image_id = sample['image_id']
-                uncont_id = self.category_id['thing_classes'].index(phrases[i])
-                sample['instances'].append({
-                    'bbox': [box[0].item(), box[1].item(), box[2].item() - box[0].item(), box[3].item() - box[1].item()],
-                    'score': logits[i].item(),
-                    # 'category_id': base_thing_dataset_id_to_contiguous_id[str(anno['category_id'])],
-                    
-                    'category_id': self.category_id['thing_dataset_id_to_contiguous_id'][str(uncont_id)],
-                    'category_name': phrases[i],
-        
-                })
             
             bbox_2d_tensor = box
             bbox_2d_tensor = self.sam_trans.apply_boxes_torch(bbox_2d_tensor, original_size).to(torch.int).squeeze(0)
@@ -1023,53 +850,5 @@ class Stage2Dataset(Dataset):
             prepare_for_dsam.append(
                 todo_dict
             )
-        if sample is not None:
-            self.dino_oracle_list.append(sample)
 
         return prepare_for_dsam
-
-    def generate_oracle_list(self, instance, K, before_pad_size, original_size, raw_image, dataset_name):
-        prepare_for_dsam = []
-        image_id = instance['obj_list'][0]['image_id']
-        oracle_index = self.imageid2oracleindex[image_id]
-        oracle = self.oracle_2d[oracle_index]
-        for i, box in enumerate(oracle['instances']):
-            bbox_2d_tensor = torch.tensor(box['bbox'], dtype=torch.int)
-            bbox_2d_tensor[2] += bbox_2d_tensor[0]
-            bbox_2d_tensor[3] += bbox_2d_tensor[1]
-            bbox_2d_tensor = self.sam_trans.apply_boxes_torch(bbox_2d_tensor, original_size).to(torch.int).squeeze(0)
-            bbox_2d_tensor[0::2] = torch.clamp(bbox_2d_tensor[0::2], min=0, max=before_pad_size[1])
-            bbox_2d_tensor[1::2] = torch.clamp(bbox_2d_tensor[1::2], min=0, max=before_pad_size[0])
-
-            human_prompt_coord = np.array([int((bbox_2d_tensor[0] + bbox_2d_tensor[2]) / 2), int((bbox_2d_tensor[1] + bbox_2d_tensor[3]) / 2)]) #* 0.5
-            point_coords_tensor = torch.tensor(human_prompt_coord, dtype=torch.int).unsqueeze(0)
-            box_coords = bbox_2d_tensor.clone()
-
-            todo_dict = {
-                "bbox_2d": bbox_2d_tensor,
-                "point_coords": point_coords_tensor,
-                "boxes_coords": box_coords,
-                "bbox_3d": torch.tensor([-1, -1, -1, -1, -1, -1, -1]),
-                "center_2d": torch.tensor([-1, -1]),
-                "instance_id": 'tbd',
-                # "instance_mask": seg_mask,
-                }
-            if self.cfg.output_rotation_matrix:
-                todo_dict['rotation_pose'] = torch.eye(3)
-            
-            if self.cfg.add_cubercnn_for_ap_inference:
-                label = box['category_name']
-                
-                if label not in self.category_id['thing_classes']:
-                    # import ipdb;ipdb.set_trace()
-                    continue
-                todo_dict['label'] = self.category_id['thing_classes'].index(label)
-                todo_dict['score'] = box['score']
-                todo_dict['image_id'] = image_id
-            
-            prepare_for_dsam.append(
-                todo_dict
-            )
-        return prepare_for_dsam
-
-

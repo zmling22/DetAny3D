@@ -1,4 +1,4 @@
-resume: ./checkpoints/detany3d_ckpts/zero_shot_category_ckpt.pth
+resume: ./checkpoints/detany3d_ckpts/other_exp_ckpt.pth
 
 output_rotation_matrix: True
 contain_edge_obj: False

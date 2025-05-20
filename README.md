@@ -1,6 +1,6 @@
-# DetAny3D (Private)
+# DetAny3D
 
-This is a private repository for the **DetAny3D** project, a promptable 3D object detector that builds on SAM, UniDepth, and GroundingDINO.
+This is the official repository for the **Detect Anything 3D in the Wild**, a promptable 3D detection foundation model capable of detecting any novel object under arbitrary camera configurations using only monocular inputs
 
 ---
 
@@ -50,11 +50,11 @@ detany3d_private/
 │   ├── sam_ckpts/
 │   │   └── sam_vit_h.pth
 │   ├── unidepth_ckpts/
-│   │   └── unidepth_latest.ckpt
+│   │   └── unidepth.pth
 │   ├── dino_ckpts/
 │   │   └── dino_swin_large.pth
 │   └── detany3d_ckpts/
-│       └── detany3d_epoch10.ckpt
+│       └── detany3d.pth
 ```
 
 > GroundingDINO's checkpoint should be downloaded from its [official repo](https://github.com/IDEA-Research/GroundingDINO) and placed as instructed in their documentation.
@@ -66,14 +66,66 @@ detany3d_private/
 
 ## 📁 Dataset Preparation
 
-**TODO:** Please refer to the dataset preparation instructions (coming soon).
+The `data/` directory should follow the structure below:
+
+```
+data/
+├── pkls/                             # Metadata or preprocessed pickle files 
+├── kitti/
+│   ├── test_depth_front/
+│   ├── ImageSets/
+│   ├── training/
+│   └── testing/
+├── nuscenes/
+|   ├── nuscenes_depth/
+│   └── samples/
+├── 3RScan/
+│   └── <token folders>/             # e.g., 10b17940-3938-...
+├── hypersim/
+|   ├── depth_in_meter/
+│   └── ai_XXX_YYY/                  # e.g., ai_055_009
+├── waymo/
+│   └── kitti_format/                # KITTI-format data for Waymo
+│       ├── validation_depth_front/
+│       ├── ImageSets/
+│       ├── training/
+│       └── testing/
+├── objectron/
+│   ├── train/
+│   └── test/
+├── ARKitScenes/
+│   ├── Training/
+│   └── Validation/
+├── cityscapes3d/
+│   ├── depth/
+│   └── leftImg8bit/
+├── SUNRGBD/
+│   ├── realsense/
+│   ├── xtion/
+|   ├── kv1/
+│   └── kv2/
+```
+
+> The download for `kitti`, `nuscenes`, `hypersim`, `objectron`, `arkitscenes`, and `sunrgbd` follow the [Omni3D](https://github.com/facebookresearch/omni3d) convention. Please refer to the Omni3D repository for details on how to organize and preprocess these datasets.
+
+> The pkls can be download from [Google Drive](https://drive.google.com/drive/folders/17AOq5i1pCTxYzyqb1zbVevPy5jAXdNho?usp=drive_link). 
+
+> **TODO**: All depth-related files will be packaged and released later.
 
 ---
 
 ## 🏋️‍♂️ Training
 
 ```
-torchrun --nproc_per_node=1 ./train.py --config_path ./detect_anything/configs/train.yaml
+torchrun \
+    --nproc_per_node=8 \
+    --master_addr=${MASTER_ADDR} \
+    --master_port=${MASTER_PORT} \
+    --nnodes=8 \
+    --node_rank=${RANK} \
+    ./train.py \
+    --config_path \
+    ./detect_anything/configs/train.yaml
 ```
 
 ---
@@ -81,8 +133,25 @@ torchrun --nproc_per_node=1 ./train.py --config_path ./detect_anything/configs/t
 ## 🔍 Inference
 
 ```
-torchrun --nproc_per_node=1 ./train.py --config_path ./detect_anything/configs/inference.yaml
+torchrun \
+    --nproc_per_node=8 \
+    --master_addr=${MASTER_ADDR} \
+    --master_port=${MASTER_PORT} \
+    --nnodes=1 \
+    --node_rank=${RANK} \
+    ./train.py \
+    --config_path \
+    ./detect_anything/configs/inference_indomain_gt_prompt.yaml
 ```
+
+
+After inference, a file named `{dataset}_output_results.json` will be generated in the `exps/<your_exp_dir>/` directory.
+
+> ⚠️ Due to compatibility issues between `pytorch3d` and the current environment, we recommend copying the output JSON file into the evaluation script of repositories like [Omni3D](https://github.com/facebookresearch/omni3d) or [OVMono3D](https://github.com/UVA-Computer-Vision-Lab/ovmono3d) for standardized metric evaluation.
+
+> **TODO**: Evaluation for zero-shot datasets currently requires manual modification of the Omni3D or OVMono3D repositories and is not yet fully supported here.  
+We plan to release a merged evaluation script in this repository to make direct evaluation more convenient in the future.
+
 
 ---
 
@@ -94,4 +163,15 @@ python ./deploy.py
 
 ---
 
-For any issues or missing steps, please contact the maintainer or submit a pull request.
+## 📚 Citation
+
+If you find this repository useful, please consider citing:
+
+```
+@article{zhang2025detect,
+  title={Detect Anything 3D in the Wild},
+  author={Zhang, Hanxue and Jiang, Haoran and Yao, Qingsong and Sun, Yanan and Zhang, Renrui and Zhao, Hao and Li, Hongyang and Zhu, Hongzi and Yang, Zetong},
+  journal={arXiv preprint arXiv:2504.07958},
+  year={2025}
+}
+```

@@ -1,5 +1,4 @@
-from detect_anything.datasets.stage2_dataset import *
-from detect_anything.datasets.stage1_dataset import *
+from detect_anything.datasets.detany3d_dataset import *
 from train_utils import *
 from wrap_model import WrapModel
 from PIL import Image
@@ -27,6 +26,7 @@ from torch.utils.tensorboard import SummaryWriter
 import random
 from torch.cuda.amp import GradScaler, autocast
 from contextlib import nullcontext  # Python 3.7+ 提供的空上下文管理器
+from torch.distributed import all_gather_object
 
 def parse_args():
     parser = argparse.ArgumentParser(description='set config path') 
@@ -63,17 +63,16 @@ def train_one_epoch(
                 input_dict['vit_pad_size'] = data['vit_pad_size']
                 image_h, image_w = int(data['before_pad_size'][0, 0]), int(data['before_pad_size'][0, 1])
 
-                if cfg.tune_with_depth:
-                    # fetch the gt data here
-                    # bug exists if batch size is not 1.
-                    depth_gt = data['depth'][:, :image_h, :image_w].to(device_id)
-                    masks = data['masks'][:, :image_h, :image_w].to(device_id)
-                    gt_angles = generate_rays(data['K'].to(device_id), (image_h, image_w))[1]
-                    phi_gt, theta_gt = gt_angles[..., 0], gt_angles[..., 1]
+                # fetch the gt data here
+                # bug exists if batch size is not 1.
+                depth_gt = data['depth'][:, :image_h, :image_w].to(device_id)
+                masks = data['masks'][:, :image_h, :image_w].to(device_id)
+                gt_angles = generate_rays(data['K'].to(device_id), (image_h, image_w))[1]
+                phi_gt, theta_gt = gt_angles[..., 0], gt_angles[..., 1]
 
-                    input_dict["image_for_dino"] = data["image_for_dino"].to(device_id)
+                input_dict["image_for_dino"] = data["image_for_dino"].to(device_id)
 
-                if cfg.tune_with_prompt and len(data['prepare_for_dsam']) > 0:
+                if len(data['prepare_for_dsam']) > 0:
                     # fetch gt here
                     gt_bboxes_2d = torch.stack([data['prepare_for_dsam'][i]['bbox_2d'].to(device_id) for i in range(len(data['prepare_for_dsam']))])
                     gt_center_2d = torch.stack([data['prepare_for_dsam'][i]['center_2d'].to(device_id) for i in range(len(data['prepare_for_dsam']))])
@@ -123,21 +122,21 @@ def train_one_epoch(
                 K_for_convert = ret_dict.get('gt_intrinsic', ret_dict['pred_K']).to(device_id)
                 loss_dict = {}
             
-                if cfg.tune_with_depth:
-                    pred_angles = generate_rays(ret_dict['pred_K'], (image_h, image_w))[1]
-                    phi_pred, theta_pred = pred_angles[..., 0], pred_angles[..., 1]
-
-                    loss_phi = SILogLoss(phi_pred, phi_gt, coefficient=cfg.loss.phi.coefficient)
-                    loss_theta = SILogLoss(theta_pred, theta_gt, coefficient=cfg.loss.theta.coefficient)
-                    loss_depth = SILogLoss(ret_dict['depth_maps'], depth_gt, coefficient=cfg.loss.depth.coefficient, masks=masks, log_mode=True)
                 
-                    if 'depth_loss' in cfg.loss.loss_list and loss_depth is not None:
-                        loss_dict['depth_loss'] = cfg.loss.depth.depth_loss_weight * loss_depth
-                    if 'intrinsic_loss' in cfg.loss.loss_list and not only_2d_mode:
-                        loss_dict['loss_phi'] = cfg.loss.phi.phi_loss_weight * loss_phi
-                        loss_dict['loss_theta'] = cfg.loss.theta.theta_loss_weight * loss_theta
+                pred_angles = generate_rays(ret_dict['pred_K'], (image_h, image_w))[1]
+                phi_pred, theta_pred = pred_angles[..., 0], pred_angles[..., 1]
 
-                if cfg.tune_with_prompt and len(data['prepare_for_dsam']) > 0:
+                loss_phi = SILogLoss(phi_pred, phi_gt, coefficient=cfg.loss.phi.coefficient)
+                loss_theta = SILogLoss(theta_pred, theta_gt, coefficient=cfg.loss.theta.coefficient)
+                loss_depth = SILogLoss(ret_dict['depth_maps'], depth_gt, coefficient=cfg.loss.depth.coefficient, masks=masks, log_mode=True)
+            
+                if 'depth_loss' in cfg.loss.loss_list and loss_depth is not None:
+                    loss_dict['depth_loss'] = cfg.loss.depth.depth_loss_weight * loss_depth
+                if 'intrinsic_loss' in cfg.loss.loss_list and not only_2d_mode:
+                    loss_dict['loss_phi'] = cfg.loss.phi.phi_loss_weight * loss_phi
+                    loss_dict['loss_theta'] = cfg.loss.theta.theta_loss_weight * loss_theta
+
+                if len(data['prepare_for_dsam']) > 0:
 
                     decoded_bboxes_pred_2d, decoded_bboxes_pred_3d = decode_bboxes(ret_dict, cfg, K_for_convert)
                     
@@ -235,26 +234,20 @@ def validate_one_epoch(
     logger):
     
     omni3d_result = []
-
     model.eval()
-    # here is the score initialization
-    scene_level_metrics, object_level_metrics = init_metrics(device_id)
-    # count bbox and scenes
-    total_bboxes = torch.zeros(1).to(device_id)
-    total_scenes = torch.zeros(1).to(device_id)
     
     val_dataloader.sampler.set_epoch(epoch)
 
     with tqdm(total=len(val_dataloader)) as t:
         for iter, data in enumerate(val_dataloader):
-            total_scenes += 1
+
             input_dict = {}
             input_dict['images'] = data['images']
             input_dict['images_shape'] = data['before_pad_size']
             input_dict['vit_pad_size'] = data['vit_pad_size']
             image_h, image_w = int(data['before_pad_size'][0, 0]), int(data['before_pad_size'][0, 1])
             
-            if cfg.inference_with_prompt and len(data['prepare_for_dsam']) > 0:
+            if len(data['prepare_for_dsam']) > 0:
                 gt_bboxes_2d = torch.stack([data['prepare_for_dsam'][i]['bbox_2d'].to(device_id) for i in range(len(data['prepare_for_dsam']))])
                 gt_bboxes_3d = torch.stack([data['prepare_for_dsam'][i]['bbox_3d'].to(device_id) for i in range(len(data['prepare_for_dsam']))])
                 gt_center_2d = torch.stack([data['prepare_for_dsam'][i]['center_2d'].to(device_id) for i in range(len(data['prepare_for_dsam']))])
@@ -273,7 +266,7 @@ def validate_one_epoch(
             ret_dict = model(input_dict)
             K_for_convert = ret_dict.get('gt_intrinsic', ret_dict['pred_K']).to(device_id)
             
-            if cfg.inference_with_prompt and len(data['prepare_for_dsam']) > 0:
+            if len(data['prepare_for_dsam']) > 0:
 
                 pred_masks = ret_dict['masks']
                 iou_predictions = ret_dict['iou_predictions']
@@ -285,8 +278,6 @@ def validate_one_epoch(
                     decoded_bboxes_pred_2d, decoded_bboxes_pred_3d = decode_bboxes(ret_dict, cfg, K_for_convert)
                 bboxes_pred_2d_center_x = decoded_bboxes_pred_2d[..., 0]
                 bboxes_pred_2d_center_y = decoded_bboxes_pred_2d[..., 1]
-                # to check, object level or scene level
-                total_bboxes += gt_bboxes_3d.shape[0]
 
                 rot_mat = None
                 gt_rot_mat = None
@@ -306,7 +297,7 @@ def validate_one_epoch(
 
                     for i in range(len(data['prepare_for_dsam'])):
                         dict_i = {}
-                        # import ipdb;ipdb.set_trace()
+
                         dict_i['image_id'] = data['prepare_for_dsam'][i]['image_id']
                         todo_box2d = data['prepare_for_dsam'][i]['bbox_2d'].numpy()
                         resize_ratio = max(data['original_size'].squeeze()) / max(image_h, image_w)
@@ -325,15 +316,15 @@ def validate_one_epoch(
                         dict_i['yaw'] = decoded_bboxes_pred_3d[i, 6].cpu().numpy().tolist()
                         omni3d_result.append(dict_i)
 
-                instance_ids = [dataset_name + '_' + f"{data['prepare_for_dsam'][i]['instance_id']}" for i in range(len(data['prepare_for_dsam']))]
                 if cfg.model.original_sam:
+                    instance_ids = [dataset_name + '_' + f"{data['prepare_for_dsam'][i]['instance_id']}" for i in range(len(data['prepare_for_dsam']))]
                     save_mask_images(pred_masks, iou_predictions ,image_h, image_w, gt_bboxes_2d, data['images'], instance_ids, save_root = cfg.exp_dir)
                 # visualize
                 if device_id == 0 and iter <= cfg.visualize_num:
 
                     input_dict['point_coords'] = torch.stack([data['prepare_for_dsam'][i]['point_coords'].to(device_id) for i in range(len(data['prepare_for_dsam']))])
 
-                    vis_prompt_func_2(
+                    vis_prompt_func(
                         cfg, data['images'], 
                         input_dict['point_coords'][:, 0, :], 
                         K_for_convert, data['K'], 
@@ -349,47 +340,32 @@ def validate_one_epoch(
                         rot_mat,
                         dataset_name,
                         epoch, iter, ret_dict.get('pred_box_ious', None))
-                    
-            if cfg.inference_with_depth:
+    
+            intrinsic_gt = data['K']
+            intrinsic_pred = ret_dict['pred_K']
 
-                intrinsic_gt = data['K']
-                intrinsic_pred = ret_dict['pred_K']
-
-                depth_map = ret_dict['depth_maps'][:, :image_h, :image_w]
-                depth_gt = data['depth'].to(device_id)[:, :image_h, :image_w]
-                masks = data['masks'].to(device_id)[:, :image_h, :image_w]                
-                
-                compute_metrics(
-                    scene_level_metrics, 
-                    object_level_metrics, 
-                    depth_gt, depth_map, 
-                    masks, intrinsic_pred[0], 
-                    intrinsic_gt[0], image_h, image_w,
-                    decoded_bboxes_pred_2d = decoded_bboxes_pred_2d if cfg.inference_with_prompt and len(data['prepare_for_dsam']) > 0 else None,
-                    gt_bboxes_2d = gt_bboxes_2d if cfg.inference_with_prompt and len(data['prepare_for_dsam']) > 0 else None,
-                    decoded_bboxes_pred_3d = decoded_bboxes_pred_3d if cfg.inference_with_prompt and len(data['prepare_for_dsam']) > 0 else None,
-                    gt_bboxes_3d = gt_bboxes_3d if cfg.inference_with_prompt and len(data['prepare_for_dsam']) > 0 else None,
-                    rot_mat = rot_mat if cfg.inference_with_prompt and len(data['prepare_for_dsam']) > 0 else None,
-                    gt_rot_mat = gt_rot_mat if cfg.inference_with_prompt and len(data['prepare_for_dsam']) > 0 else None)
-                
-                if iter < 5 and device_id == 0:
-                    depth_gt[depth_gt == torch.inf] = 0
-
-                    if (epoch + 1) % cfg.eval_interval == 0:
-                        save_depth_image(depth_gt[0].unsqueeze(0), f'{cfg.exp_dir}/{dataset_name}_depth_gt_{iter}.png', max_depth=int(depth_gt[0].max()))
-                        save_color_image(data['images'][0].unsqueeze(0), image_h, image_w, f'{cfg.exp_dir}/{dataset_name}_raw_gt_{iter}.png')
-                        save_point_cloud(depth_gt[0].unsqueeze(0), data['images'][0].unsqueeze(0), intrinsic_gt[0].unsqueeze(0), f"{cfg.exp_dir}/{dataset_name}_gt_{iter}.ply", image_h, image_w)
-
-                    save_depth_image(depth_map[0].unsqueeze(0), f'{cfg.exp_dir}/{dataset_name}_depth_pred_{epoch}_{iter}.png', max_depth=int(depth_map[0].max()))
-                    save_point_cloud(depth_map[0].unsqueeze(0), data['images'][0].unsqueeze(0), K_for_convert[0].unsqueeze(0), f"{cfg.exp_dir}/{dataset_name}_pred_{epoch}_{iter}.ply", image_h, image_w)
+            depth_map = ret_dict['depth_maps'][:, :image_h, :image_w]
+            depth_gt = data['depth'].to(device_id)[:, :image_h, :image_w]
+            masks = data['masks'].to(device_id)[:, :image_h, :image_w]                
             
+            if iter < 5 and device_id == 0:
+                depth_gt[depth_gt == torch.inf] = 0
+
+                if (epoch + 1) % cfg.eval_interval == 0:
+                    save_depth_image(depth_gt[0].unsqueeze(0), f'{cfg.exp_dir}/{dataset_name}_depth_gt_{iter}.png', max_depth=int(depth_gt[0].max()))
+                    save_color_image(data['images'][0].unsqueeze(0), image_h, image_w, f'{cfg.exp_dir}/{dataset_name}_raw_gt_{iter}.png')
+                    save_point_cloud(depth_gt[0].unsqueeze(0), data['images'][0].unsqueeze(0), intrinsic_gt[0].unsqueeze(0), f"{cfg.exp_dir}/{dataset_name}_gt_{iter}.ply", image_h, image_w)
+
+                save_depth_image(depth_map[0].unsqueeze(0), f'{cfg.exp_dir}/{dataset_name}_depth_pred_{epoch}_{iter}.png', max_depth=int(depth_map[0].max()))
+                save_point_cloud(depth_map[0].unsqueeze(0), data['images'][0].unsqueeze(0), K_for_convert[0].unsqueeze(0), f"{cfg.exp_dir}/{dataset_name}_pred_{epoch}_{iter}.ply", image_h, image_w)
+        
             if device_id == 0:
                 t.update(1) 
 
         if device_id == 0:
             t.set_description(desc=f"Val Epoch {epoch} for {dataset_name}")
 
-    return scene_level_metrics, object_level_metrics, total_bboxes, total_scenes, omni3d_result
+    return omni3d_result
         
 
 def trainval_sam(
@@ -435,7 +411,7 @@ def trainval_sam(
 
         with torch.no_grad():
             for dataset_name, val_dataloader in val_dataloaders:
-                scene_level_metrics, object_level_metrics, total_bboxes, total_scenes, omni3d_result = validate_one_epoch(
+                omni3d_result = validate_one_epoch(
                     cfg,
                     model,
                     device_id,
@@ -444,48 +420,22 @@ def trainval_sam(
                     epoch,
                     logger
                 )
-                
-                for key, value in scene_level_metrics.items():
-                    dist.all_reduce(scene_level_metrics[key])
-                
-                for key, value in object_level_metrics.items():
-                    dist.all_reduce(object_level_metrics[key])
-                
-                dist.all_reduce(total_bboxes)
-                dist.all_reduce(total_scenes)
-
-                if cfg.rank == 0:    
-                    avg_scene_level_metrics = {key: (value / total_scenes).cpu().item() for key, value in scene_level_metrics.items()} 
-                    logger.info({f"{dataset_name}_{key}": value for key, value in avg_scene_level_metrics.items()})
-                    if cfg.inference_with_prompt:
-                        avg_object_level_metrics = {key: (value / total_bboxes).cpu().item() for key, value in object_level_metrics.items()} 
-                        logger.info({f"{dataset_name}_{key}": value for key, value in avg_object_level_metrics.items()})
-
-                if cfg.writer and cfg.rank == 0:
-                    for key, value in avg_scene_level_metrics.items():
-                        cfg.writer.add_scalar(f'Validation_{dataset_name}/{key}', value, epoch)
-                    if cfg.inference_with_prompt:
-                        for key, value in avg_object_level_metrics.items():
-                            cfg.writer.add_scalar(f'Validation_{dataset_name}/{key}', value, epoch)
             
                 if cfg.add_cubercnn_for_ap_inference:
                     dist.barrier()
-                    import json
-                
-                    with open(f"temp_output_{cfg.rank}.json", "w") as json_file:
-                        json.dump(omni3d_result, json_file, indent=4)  # indent 参数用于设置缩进，便于阅读
+                    # 每张卡都有自己的部分结果
+                    local_result = omni3d_result  # 是 list 或 dict 都可以
+                    all_results = [None for _ in range(dist.get_world_size())]
 
-                    dist.barrier()   
+                    # 所有卡 gather 结果
+                    all_gather_object(all_results, local_result)
+
                     if dist.get_rank() == 0:
-                        final_json_results = []
-                        for i in range(dist.get_world_size()):
-                            
-                            with open(f"temp_output_{i}.json", "r") as json_file:
-                                omni_results_temp = json.load(json_file)
-                            final_json_results += omni_results_temp
-                            print(len(final_json_results))
-                        with open(f"{cfg.exp_dir}/{dataset_name}{cfg.output_json_file}.json", "w") as json_file:
-                            json.dump(final_json_results, json_file, indent=4)  # indent 参数用于设置缩进，便于阅读
+                        final_results = []
+                        for r in all_results:
+                            final_results += r  # 或 final_results.append(r) 如果是 dict
+                        with open(f"{cfg.exp_dir}/{dataset_name}_{cfg.output_json_file}.json", "w") as f:
+                            json.dump(final_results, f, indent=4)
                     dist.barrier()
 
 def main():
@@ -525,21 +475,14 @@ def main():
 
     logger.info(cfg)
     transform_train, transform_test = get_depth_transform()
-    if cfg.tune_with_prompt:
-        train_dataset = Stage2Dataset(cfg, transform = transform_train, mode = 'train')
-    else:
-        train_dataset = Stage1Dataset(cfg, transform = transform_train, mode = 'train')
-
+    
+    train_dataset = DetAny3DDataset(cfg, transform = transform_train, mode = 'train')
     train_sampler = DistributedSampler(train_dataset, shuffle=True)
     train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, sampler=train_sampler, collate_fn=collector)
 
     val_loaders = []
     for dataset_name in cfg.dataset.val.keys():
-        if cfg.inference_with_prompt:
-            val_dataset = Stage2Dataset(cfg, transform=transform_test, mode='val', dataset_name=dataset_name)
-        else:
-            val_dataset = Stage1Dataset(cfg, transform=transform_test, mode='val', dataset_name=dataset_name)
-
+        val_dataset = DetAny3DDataset(cfg, transform=transform_test, mode='val', dataset_name=dataset_name)
         logger.info(f"val_dataset: {val_dataset.raw_info}")
 
         val_sampler = DistributedSampler(val_dataset, shuffle=False)
@@ -588,7 +531,7 @@ def main():
 
     my_sam_model = DDP(my_sam_model, device_ids=[device_id], find_unused_parameters=True)
 
-    optimizer, scheduler = configure_opt_v3(cfg, my_sam_model, train_loader)
+    optimizer, scheduler = configure_opt(cfg, my_sam_model, train_loader)
     
     if cfg.resume and not cfg.inference_only:
         if cfg.resume_scheduler:
