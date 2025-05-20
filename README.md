@@ -109,8 +109,9 @@ data/
 > The download for `kitti`, `nuscenes`, `hypersim`, `objectron`, `arkitscenes`, and `sunrgbd` follow the [Omni3D](https://github.com/facebookresearch/omni3d) convention. Please refer to the Omni3D repository for details on how to organize and preprocess these datasets.
 
 > The pkls can be download from [Google Drive](https://drive.google.com/drive/folders/17AOq5i1pCTxYzyqb1zbVevPy5jAXdNho?usp=drive_link). 
+**TODO**: All depth-related files will be packaged and released later.
 
-> **TODO**: All depth-related files will be packaged and released later.
+> ⚠️ Although we have not released depth files yet, they are not required for inference. You can safely set `depth_path = None` in [detany3d_dataset.py](./detect_anything/datasets/detany3d_dataset.py) to bypass it during evaluation.
 
 ---
 

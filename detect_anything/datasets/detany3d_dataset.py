@@ -70,9 +70,8 @@ class DetAny3DDataset(Dataset):
             self.dino_model = load_model("GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py", "GroundingDINO/weights/groundingdino_swint_ogc.pth")
             self.BOX_TRESHOLD = 0.001
             self.TEXT_TRESHOLD = 0.25
-        with open('/cpfs01/user/zhanghanxue/segment-anything/data/category_meta.json', 'r') as f:
+        with open('./detect_anything/data/category_meta.json', 'r') as f:
             self.category_id = json.load(f)
-
 
     def _load_single_dataset(self, dataset_name, dataset_info):
         """加载单个数据集的功能，供重复使用"""
