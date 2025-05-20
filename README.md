@@ -34,7 +34,7 @@ Below are example visualizations of DetAny3D predictions:
 ## 📌 TODO
 
 ### ✅ Done
-- Release full code and pretrained models
+- Release full code and pretrained models *(via email request)*
 - Provide training and inference scripts
 
 ### 🛠️ In Progress
@@ -77,10 +77,10 @@ pip install -e .
 
 ## 📦 Checkpoints
 
-Please download checkpoints from the following sources and place them under the structure below:
+Please download third-party checkpoints from the following sources:
 
-- **DetAny3D / UniDepth / DINO checkpoints**: [Google Drive (link)](https://drive.google.com/drive/folders/17AOq5i1pCTxYzyqb1zbVevPy5jAXdNho?usp=drive_link)
 - **SAM checkpoint**: Please download `sam_vit_h.pth` from the official [SAM GitHub Releases](https://github.com/facebookresearch/segment-anything)
+- **UniDepth / DINO checkpoints**: Available via [Google Drive](https://drive.google.com/drive/folders/17AOq5i1pCTxYzyqb1zbVevPy5jAXdNho?usp=drive_link)
 
 ```
 detany3d_private/
@@ -97,7 +97,10 @@ detany3d_private/
 
 > GroundingDINO's checkpoint should be downloaded from its [official repo](https://github.com/IDEA-Research/GroundingDINO) and placed as instructed in their documentation.
 
-> All checkpoint paths can be configured inside `./detect_anything/configs/*`.
+> 📩 The pretrained **DetAny3D model weights** (`detany3d_ckpts`) are **not publicly released** at this time.  
+If you are interested in using the model or collaborating, please contact us via email.
+
+> 📬 Contact: `zhx_jiaxue@sjtu.edu.cn` or open a collaboration request issue.
 
 
 
