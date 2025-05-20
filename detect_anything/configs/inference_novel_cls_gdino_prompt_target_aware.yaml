@@ -53,8 +53,8 @@ unlock_all_backbone: false
 # unidepth related parameters
 load_unidepth_ckpt: True
 dino_dim: 1024
-unidepth_path: '/cpfs01/shared/opendrivelab/zhanghanxue/DetAny3D/model.pth'
-dino_path: "/cpfs01/shared/opendrivelab/zhanghanxue/DetAny3D/dinov2_vitl14_pretrain.pth"
+unidepth_path: './checkpoints/unidepth_ckpts/model.pth'
+dino_path: "./checkpoints/dino_ckpts/dinov2_vitl14_pretrain.pth"
 
 # optmizer
 opt: 
@@ -129,7 +129,7 @@ dataset:
       max_distance: 100
       min_distance: 0.1
       metric_scale: 1.
-      pkl_path: './data/pkls/omni3d23daw/KITTI_train.pkl'
+      pkl_path: './data/DA3D_pkls/omni3d23daw/KITTI_train.pkl'
 
   val:
     kitti:
@@ -140,7 +140,7 @@ dataset:
       max_distance: 100
       min_distance: 0.1
       metric_scale: 1.
-      pkl_path: ./data/pkls/ovmono3d_novel_gt/KITTI_test_novel.pkl
+      pkl_path: ./data/DA3D_pkls/ovmono3d_novel_gt/KITTI_test_novel.pkl
 
 
     sunrgbd:
@@ -151,7 +151,7 @@ dataset:
       max_distance: 5
       min_distance: 0.01
       metric_scale: 10000.
-      pkl_path: ./data/pkls/ovmono3d_novel_gt/SUNRGBD_test_novel.pkl
+      pkl_path: ./data/DA3D_pkls/ovmono3d_novel_gt/SUNRGBD_test_novel.pkl
 
 
     arkitscenes:
@@ -162,6 +162,6 @@ dataset:
       max_distance: 5
       min_distance: 0.01
       metric_scale: 1
-      pkl_path: ./data/pkls/ovmono3d_novel_gt/ARKitScenes_test_novel.pkl
+      pkl_path: ./data/DA3D_pkls/ovmono3d_novel_gt/ARKitScenes_test_novel.pkl
 
     

@@ -53,8 +53,8 @@ unlock_all_backbone: false
 # unidepth related parameters
 load_unidepth_ckpt: True
 dino_dim: 1024
-unidepth_path: '/cpfs01/shared/opendrivelab/zhanghanxue/DetAny3D/model.pth'
-dino_path: "/cpfs01/shared/opendrivelab/zhanghanxue/DetAny3D/dinov2_vitl14_pretrain.pth"
+unidepth_path: './checkpoints/unidepth_ckpts/model.pth'
+dino_path: "./checkpoints/dino_ckpts/dinov2_vitl14_pretrain.pth"
 
 # optmizer
 opt: 
@@ -68,7 +68,7 @@ opt:
 
 model:
   type: 'vit_h'
-  checkpoint: '/cpfs01/user/zhanghanxue/segment-anything/sam_vit_h_4b8939.pth'
+  checkpoint: './checkpoints/sam_ckpts/sam_vit_h_4b8939.pth'
   pad: 896
   image_encoder:
     img_size: 1024

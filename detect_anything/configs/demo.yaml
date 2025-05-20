@@ -10,11 +10,11 @@ inference_with_prompt: True
 max_depth: 100
 
 dino_dim: 1024
-dino_path: "/cpfs01/shared/opendrivelab/zhanghanxue/DetAny3D/dinov2_vitl14_pretrain.pth"
+dino_path: "./checkpoints/dino_ckpts/dinov2_vitl14_pretrain.pth"
 
 model:
   type: 'vit_h'
-  checkpoint: '/cpfs01/user/zhanghanxue/segment-anything/sam_vit_h_4b8939.pth'
+  checkpoint: './checkpoints/sam_ckpts/sam_vit_h_4b8939.pth'
   pad: 896
   image_encoder:
     img_size: 1024

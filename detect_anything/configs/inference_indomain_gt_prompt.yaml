@@ -53,8 +53,8 @@ unlock_all_backbone: false
 # unidepth related parameters
 load_unidepth_ckpt: True
 dino_dim: 1024
-unidepth_path: '/cpfs01/shared/opendrivelab/zhanghanxue/DetAny3D/model.pth'
-dino_path: "/cpfs01/shared/opendrivelab/zhanghanxue/DetAny3D/dinov2_vitl14_pretrain.pth"
+unidepth_path: './checkpoints/unidepth_ckpts/model.pth'
+dino_path: "./checkpoints/dino_ckpts/dinov2_vitl14_pretrain.pth"
 
 # optmizer
 opt: 
@@ -129,7 +129,7 @@ dataset:
       max_distance: 100
       min_distance: 0.1
       metric_scale: 1.
-      pkl_path: './data/pkls/omni3d23daw/KITTI_train.pkl'
+      pkl_path: './data/DA3D_pkls/omni3d23daw/KITTI_train.pkl'
 
   val:
     # cityscapes:
@@ -141,7 +141,7 @@ dataset:
     #   max_distance: 100
     #   min_distance: 1
     #   metric_scale: 1.
-    #   pkl_path: ./data/pkls/omni3d23daw/Cityscapes3D_test.pkl
+    #   pkl_path: ./data/DA3D_pkls/omni3d23daw/Cityscapes3D_test.pkl
     # waymo:
     #   range:
     #     begin: 0 
@@ -150,7 +150,7 @@ dataset:
     #   max_distance: 100
     #   min_distance: 1
     #   metric_scale: 1.
-    #   pkl_path: ./data/pkls/omni3d23daw/waymo_test.pkl
+    #   pkl_path: ./data/DA3D_pkls/omni3d23daw/waymo_test.pkl
     nuscenes:
       # xywl_mode: True
       range:
@@ -160,7 +160,7 @@ dataset:
       max_distance: 100
       min_distance: 0.1
       metric_scale: 218.45
-      pkl_path: ./data/pkls/omni3d23daw/nuScenes_test.pkl
+      pkl_path: ./data/DA3D_pkls/omni3d23daw/nuScenes_test.pkl
      
     hypersim:
       range:
@@ -170,7 +170,7 @@ dataset:
       max_distance: 35
       min_distance: 0.01
       metric_scale: 1.
-      pkl_path: ./data/pkls/omni3d23daw/Hypersim_test.pkl
+      pkl_path: ./data/DA3D_pkls/omni3d23daw/Hypersim_test.pkl
 
     kitti:
       range:
@@ -180,7 +180,7 @@ dataset:
       max_distance: 100
       min_distance: 0.1
       metric_scale: 1.
-      pkl_path: ./data/pkls/omni3d23daw/KITTI_test.pkl
+      pkl_path: ./data/DA3D_pkls/omni3d23daw/KITTI_test.pkl
 
 
     sunrgbd:
@@ -192,7 +192,7 @@ dataset:
       max_distance: 5
       min_distance: 0.01
       metric_scale: 10000.
-      pkl_path: ./data/pkls/omni3d23daw/SUNRGBD_test.pkl
+      pkl_path: ./data/DA3D_pkls/omni3d23daw/SUNRGBD_test.pkl
 
     objectron:
       range:
@@ -202,7 +202,7 @@ dataset:
       max_distance: 5
       min_distance: 0.01
       metric_scale: 1
-      pkl_path: ./data/pkls/omni3d23daw/Objectron_test.pkl
+      pkl_path: ./data/DA3D_pkls/omni3d23daw/Objectron_test.pkl
 
     arkitscenes:
       # xywl_mode: True
@@ -213,6 +213,6 @@ dataset:
       max_distance: 5
       min_distance: 0.01
       metric_scale: 1
-      pkl_path: ./data/pkls/omni3d23daw/ARKitScenes_test.pkl
+      pkl_path: ./data/DA3D_pkls/omni3d23daw/ARKitScenes_test.pkl
 
     

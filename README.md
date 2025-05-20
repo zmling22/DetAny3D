@@ -1,8 +1,47 @@
 # DetAny3D
 
-This is the official repository for the **Detect Anything 3D in the Wild**, a promptable 3D detection foundation model capable of detecting any novel object under arbitrary camera configurations using only monocular inputs
+This is the official repository for the **[Detect Anything 3D in the Wild](https://arxiv.org/abs/2504.07958)**, a promptable 3D detection foundation model capable of detecting any novel object under arbitrary camera configurations using only monocular inputs
 
----
+
+<!-- ## 🖼️ Demo Results
+
+Below are example visualizations of DetAny3D predictions:
+
+<p align="center">
+  <img src="assets/demo1.jpg" alt="Demo 1" width="400"/>
+  <img src="assets/demo2.jpg" alt="Demo 2" width="400"/>
+</p>
+
+<p align="center">
+  <img src="assets/demo3.jpg" alt="Demo 3" width="400"/>
+  <img src="assets/demo4.jpg" alt="Demo 4" width="400"/>
+</p> -->
+
+## 📖 Table of Contents
+
+- [📌 TODO](#-todo)
+- [🚀 Getting Started](#-getting-started)
+  - [Step 1: Create Environment](#step-1-create-environment)
+  - [Step 2: Install Dependencies](#step-2-install-dependencies)
+- [📦 Checkpoints](#-checkpoints)
+- [📁 Dataset Preparation](#-dataset-preparation)
+- [🏋️‍♂️ Training](#️-training)
+- [🔍 Inference](#-inference)
+- [🌐 Launch Online Demo](#-launch-online-demo)
+- [📚 Citation](#-citation)
+
+
+## 📌 TODO
+
+### ✅ Done
+- Release full code and pretrained models
+- Provide training and inference scripts
+
+### 🛠️ In Progress
+- **TODO**: Release the full DA3D dataset
+- **TODO**: Simplify the inference process
+- **TODO**: Provide a tutorial for creating customized datasets and finetune
+
 
 ## 🚀 Getting Started
 
@@ -35,7 +74,6 @@ pip install -e .
 
 > 📌 The exact dependency versions are listed in our `requirements.txt`
 
----
 
 ## 📦 Checkpoints
 
@@ -62,7 +100,6 @@ detany3d_private/
 > All checkpoint paths can be configured inside `./detect_anything/configs/*`.
 
 
----
 
 ## 📁 Dataset Preparation
 
@@ -70,7 +107,7 @@ The `data/` directory should follow the structure below:
 
 ```
 data/
-├── pkls/                             # Metadata or preprocessed pickle files 
+├── DA3D_pkls/                             # DA3D processed pickle files 
 ├── kitti/
 │   ├── test_depth_front/
 │   ├── ImageSets/
@@ -108,12 +145,12 @@ data/
 
 > The download for `kitti`, `nuscenes`, `hypersim`, `objectron`, `arkitscenes`, and `sunrgbd` follow the [Omni3D](https://github.com/facebookresearch/omni3d) convention. Please refer to the Omni3D repository for details on how to organize and preprocess these datasets.
 
-> The pkls can be download from [Google Drive](https://drive.google.com/drive/folders/17AOq5i1pCTxYzyqb1zbVevPy5jAXdNho?usp=drive_link). 
-**TODO**: All depth-related files will be packaged and released later.
+> 📁 The `DA3D_pkls` (minimal metadata for inference) can be downloaded from [Google Drive](https://drive.google.com/drive/folders/17AOq5i1pCTxYzyqb1zbVevPy5jAXdNho?usp=drive_link).  
+> 🧩 **Note**: This release currently supports a minimal inference-only version. Full dataset + training support + all depth-related files will be provided later.
 
-> ⚠️ Although we have not released depth files yet, they are not required for inference. You can safely set `depth_path = None` in [detany3d_dataset.py](./detect_anything/datasets/detany3d_dataset.py) to bypass it during evaluation.
+> ⚠️ Depth files are not required for inference. You can safely set `depth_path = None` in [detany3d_dataset.py](./detect_anything/datasets/detany3d_dataset.py) to bypass depth loading.  
 
----
+
 
 ## 🏋️‍♂️ Training
 
@@ -129,7 +166,6 @@ torchrun \
     ./detect_anything/configs/train.yaml
 ```
 
----
 
 ## 🔍 Inference
 
@@ -150,11 +186,10 @@ After inference, a file named `{dataset}_output_results.json` will be generated 
 
 > ⚠️ Due to compatibility issues between `pytorch3d` and the current environment, we recommend copying the output JSON file into the evaluation script of repositories like [Omni3D](https://github.com/facebookresearch/omni3d) or [OVMono3D](https://github.com/UVA-Computer-Vision-Lab/ovmono3d) for standardized metric evaluation.
 
-> **TODO**: Evaluation for zero-shot datasets currently requires manual modification of the Omni3D or OVMono3D repositories and is not yet fully supported here.  
+> **TODO**: Evaluation for zero-shot datasets currently requires manual modification of the Omni3D or OVMono3D repositories and is not yet fully supported here.   
 We plan to release a merged evaluation script in this repository to make direct evaluation more convenient in the future.
 
 
----
 
 ## 🌐 Launch Online Demo
 
@@ -162,7 +197,6 @@ We plan to release a merged evaluation script in this repository to make direct 
 python ./deploy.py
 ```
 
----
 
 ## 📚 Citation
 
