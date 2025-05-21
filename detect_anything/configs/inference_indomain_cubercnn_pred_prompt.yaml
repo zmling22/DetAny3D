@@ -162,16 +162,6 @@ dataset:
       metric_scale: 218.45
       pkl_path: ./data/DA3D_pkls/cubercnn2pred/nuScenes_test.pkl
      
-    hypersim:
-      xywl_mode: True
-      range:
-        begin: 0
-        end: -1
-        interval: 1
-      max_distance: 35
-      min_distance: 0.01
-      metric_scale: 1.
-      pkl_path: ./data/DA3D_pkls/cubercnn2pred/Hypersim_test.pkl
 
     kitti:
       xywl_mode: True
@@ -183,6 +173,17 @@ dataset:
       min_distance: 0.1
       metric_scale: 1.
       pkl_path: ./data/DA3D_pkls/cubercnn2pred/KITTI_test.pkl
+    
+    hypersim:
+      xywl_mode: True
+      range:
+        begin: 0
+        end: -1
+        interval: 1
+      max_distance: 35
+      min_distance: 0.01
+      metric_scale: 1.
+      pkl_path: ./data/DA3D_pkls/cubercnn2pred/Hypersim_test.pkl
 
 
     sunrgbd:

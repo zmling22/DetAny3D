@@ -604,7 +604,6 @@ class Unidepth_Decoder(nn.Module):
             "depth_maps": depth,
             "confidence": confidence,
             "depth_features": depth_features.reshape(B, patch_H, patch_W, -1).contiguous(),
-            "depth_features_0": depth_features0,
             "metric_features": metric_feature,
             "camera_features": camera_feature,
             "scale": scale,
