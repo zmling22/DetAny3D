@@ -14,7 +14,7 @@ Each `.pkl` file should be a list of dictionary samples with the following keys:
   "obj_list": [                 # List of 3D object annotations
     {
       "3d_bbox": [x, y, z, w, h, l, yaw],     # 3D bounding box in camera coordinates
-      "2d_bbox_proj": [x1, y1, x2, y2],       # Projected 2D bounding box
+      "2d_bbox_proj": [x1, y1, x2, y2],       # (optional) Projected 2D bounding box
       "2d_bbox_tight": [x1, y1, x2, y2],                # (optional) Tight 2D box
       "2d_bbox_trunc": [x1, y1, x2, y2],                # (optional) Truncated 2D box
       "label": int,                          # Category ID
