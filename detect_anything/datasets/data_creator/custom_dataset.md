@@ -56,7 +56,7 @@ left  ---- O ----→ x (right)   yaw = π/2
   - +Z → forward (view direction)
 - **Yaw** is rotation around the **Y axis (downward)**
   - **yaw = 0** → object faces forward (+Z)
-  - **yaw = π/2** → object turns left, faces +X
+  - **yaw = π/2** → object turns right, faces +X
 
 
 ---

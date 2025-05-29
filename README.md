@@ -34,10 +34,11 @@ Below are example visualizations of DetAny3D predictions:
 ## 📌 TODO
 
 ### ✅ Done
-- Release full code and pretrained models *(via email request)*
+- Release full code
 - Provide training and inference scripts
 
 ### 🛠️ In Progress
+- **TODO**: Release the model weights
 - **TODO**: Release the full DA3D dataset
 - **TODO**: Simplify the inference process
 - **TODO**: Provide a tutorial for creating customized datasets and finetune
@@ -100,7 +101,7 @@ detany3d_private/
 > 📩 The pretrained **DetAny3D model weights** (`detany3d_ckpts`) are **not publicly released** at this time.  
 If you are interested in using the model or collaborating, please contact us via email.
 
-> 📬 Contact: `zhx_jiaxue@sjtu.edu.cn` or open a collaboration request issue.
+> 📬 Contact: `zhx_jiaxue@sjtu.edu.cn`.
 
 
 
@@ -149,7 +150,7 @@ data/
 > The download for `kitti`, `nuscenes`, `hypersim`, `objectron`, `arkitscenes`, and `sunrgbd` follow the [Omni3D](https://github.com/facebookresearch/omni3d) convention. Please refer to the Omni3D repository for details on how to organize and preprocess these datasets.
 
 > 🗂️ The `DA3D_pkls` (minimal metadata for inference) can be downloaded from [Google Drive](https://drive.google.com/drive/folders/17AOq5i1pCTxYzyqb1zbVevPy5jAXdNho?usp=drive_link).  
-> 🧩 **Note**: This release currently supports a minimal inference-only version. Full dataset + training support + all depth-related files will be provided later.
+> 🧩 **Note**: This release currently supports a minimal inference-only version. Full dataset + all depth-related files will be provided later.
 
 > ⚠️ Depth files are not required for inference. You can safely set `depth_path = None` in [detany3d_dataset.py](./detect_anything/datasets/detany3d_dataset.py) to bypass depth loading.  
 
