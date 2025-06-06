@@ -150,7 +150,7 @@ data/
 > The download for `kitti`, `nuscenes`, `hypersim`, `objectron`, `arkitscenes`, and `sunrgbd` follow the [Omni3D](https://github.com/facebookresearch/omni3d) convention. Please refer to the Omni3D repository for details on how to organize and preprocess these datasets.
 
 > 🗂️ The `DA3D_pkls` (minimal metadata for inference) can be downloaded from [Google Drive](https://drive.google.com/drive/folders/17AOq5i1pCTxYzyqb1zbVevPy5jAXdNho?usp=drive_link).  
-> 🧩 **Note**: This release currently supports a minimal inference-only version. Full dataset + all depth-related files will be provided later.
+> 🧩 **Note**: This release currently supports a minimal inference-only version. The conversion scripts of full dataset + all depth-related files will be provided later.
 
 > ⚠️ Depth files are not required for inference. You can safely set `depth_path = None` in [detany3d_dataset.py](./detect_anything/datasets/detany3d_dataset.py) to bypass depth loading.  
 
