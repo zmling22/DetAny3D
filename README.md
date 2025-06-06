@@ -99,7 +99,7 @@ detany3d_private/
 > GroundingDINO's checkpoint should be downloaded from its [official repo](https://github.com/IDEA-Research/GroundingDINO) and placed as instructed in their documentation.
 
 > 📩 The pretrained **DetAny3D model weights** (`detany3d_ckpts`) are **not publicly released** at this time.  
-If you are interested in using the model or collaborating, please contact us via email.
+If you are interested in using the model and collaborating, please contact us via email.
 
 > 📬 Contact: `zhx_jiaxue@sjtu.edu.cn`.
 
