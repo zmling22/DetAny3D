@@ -39,7 +39,7 @@ Below are example visualizations of DetAny3D predictions:
 
 ### 🛠️ In Progress
 - **TODO**: Release the model weights
-- **TODO**: Release the full DA3D dataset
+- **TODO**: Provide full conversion scripts for constructing DA3D locally
 - **TODO**: Simplify the inference process
 - **TODO**: Provide a tutorial for creating customized datasets and finetune
 
