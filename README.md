@@ -36,12 +36,12 @@ Below are example visualizations of DetAny3D predictions:
 ### ✅ Done
 - Release full code
 - Provide training and inference scripts
+- Release the model weights
 
 ### 🛠️ In Progress
-- **TODO**: Release the model weights
 - **TODO**: Provide full conversion scripts for constructing DA3D locally
 - **TODO**: Simplify the inference process
-- **TODO**: Provide a tutorial for creating customized datasets and finetune
+- **TODO**: Provide a tutorial for creating customized datasets and finetuning
 
 
 ## 🚀 Getting Started
@@ -97,12 +97,6 @@ detany3d_private/
 ```
 
 > GroundingDINO's checkpoint should be downloaded from its [official repo](https://github.com/IDEA-Research/GroundingDINO) and placed as instructed in their documentation.
-
-> 📩 The pretrained **DetAny3D model weights** (`detany3d_ckpts`) are **not publicly released** at this time.  
-If you are interested in using the model and collaborating, please contact us via email.
-
-> 📬 Contact: `zhx_jiaxue@sjtu.edu.cn`.
-
 
 
 ## 📁 Dataset Preparation
