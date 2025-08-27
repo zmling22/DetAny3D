@@ -1,6 +1,13 @@
+# process_b.py
+from utils import SharedMemoryManager
+import numpy as np
+import cv2
+import sys
+import time
 from train_utils import *
 from wrap_model import WrapModel
 
+from flask import Flask, request, jsonify
 from PIL import Image
 import cv2
 import yaml
@@ -9,10 +16,8 @@ import torch.nn as nn
 import torch.distributed as dist
 from box import Box
 import random
-
-
-import gradio as gr
-from gradio_image_prompter import ImagePrompter
+import flask
+import base64
 
 from groundingdino.util.inference import load_model
 from groundingdino.util.inference import predict as dino_predict
@@ -22,6 +27,10 @@ import colorsys
 import json
 import hashlib
 import io
+from segment_anything import SamPredictor, sam_model_registry
+
+
+app = Flask(__name__)
 
 with open('./detect_anything/configs/demo.yaml', 'r', encoding='utf-8') as f:
     cfg = yaml.load(f.read(), Loader=yaml.FullLoader)
@@ -58,7 +67,11 @@ dino_model.eval()
 BOX_TRESHOLD = 0.37
 TEXT_TRESHOLD = 0.25
 
+sam = sam_model_registry["vit_h"](checkpoint=cfg.model.checkpoint)
+predictor = SamPredictor(sam)
+
 import groundingdino.datasets.transforms as T
+
 def convert_image(img):
     transform = T.Compose(
         [
@@ -73,7 +86,6 @@ def convert_image(img):
     return image, image_transformed
 
 def crop_hw(img):
-        
     if img.dim() == 4:
         img = img.squeeze(0)
     h, w = img.shape[1:3]  # 假设形状为 [C, H, W]
@@ -157,7 +169,52 @@ def draw_text(im, text, pos, scale=0.4, color='auto', font=cv2.FONT_HERSHEY_SIMP
 
     cv2.putText(im, text, tuple(pos), font, scale, color, lineType)
     
-def predict(input_dict, text):
+
+def predict_2d(input_dict, text):
+    with torch.no_grad():
+        img, points = input_dict['image'], input_dict['points']
+
+        pixels = np.array(img).reshape(-1, 3) / 255.0
+
+        # 改进点1：根据亮度加权采样（避免全随机选到过多暗色）
+        brightness = pixels.mean(axis=1)  # 计算每个像素的亮度
+        prob = brightness / brightness.sum()  # 亮度越高采样概率越大
+        sampled_indices = np.random.choice(pixels.shape[0], 100, p=prob, replace=False)
+        sampled_colors = pixels[sampled_indices]
+        # 改进点2：按亮度排序而非直接排序
+        sampled_colors = sorted(sampled_colors, key=lambda c: colorsys.rgb_to_hsv(*c)[2])
+        # 应用亮度增强
+        adjusted_colors = [adjust_brightness(c, factor=2.0, v_min=0.4) for c in sampled_colors]
+
+        if img is None:
+            raise Exception("No image received")
+        
+        label_list = []
+        bbox_2d_list = []
+        
+        if len(bbox_2d_list) > 0:
+            raise Exception("Can not hadle bounding box and point at the same time.")
+        
+        image_source_dino, image_dino = convert_image(img)
+        boxes, logits, phrases = dino_predict(
+            model=dino_model,
+            image=image_dino,
+            caption=text,
+            box_threshold=BOX_TRESHOLD,
+            text_threshold=TEXT_TRESHOLD,
+            remove_combined=False,
+        )
+
+        h, w, _ = image_source_dino.shape
+        boxes = boxes * torch.Tensor([w, h, w, h])
+        xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy")
+        for i, box in enumerate(xyxy):
+            bbox_2d_list.append(box.to(torch.int).cpu().numpy().tolist())
+            label_list.append(phrases[i])
+        
+    return bbox_2d_list, label_list
+
+def predict_3d(input_dict, text):
     with torch.no_grad():
         img, points = input_dict['image'], input_dict['points']
         image_token = generate_image_token(img)
@@ -175,7 +232,7 @@ def predict(input_dict, text):
         adjusted_colors = [adjust_brightness(c, factor=2.0, v_min=0.4) for c in sampled_colors]
 
         if img is None:
-            return "No image received"
+            raise Exception("No image received")
         
         label_list = []
         bbox_2d_list = []
@@ -187,7 +244,6 @@ def predict(input_dict, text):
                 point_coords_tensor = torch.tensor(human_prompt_coord, dtype=torch.int).unsqueeze(0)
                 point_coords_list.append(point_coords_tensor)
                 
-                
             if point[2] == 2 and point[5] == 3:
                 x1, y1 = point[:2]
                 x2, y2 = point[3:5]
@@ -196,7 +252,7 @@ def predict(input_dict, text):
                 label_list.append("Unknow")
         
         if len(bbox_2d_list) > 0 and len(point_coords_list) > 0:
-            raise gr.Error("Can not hadle bounding box and point at the same time.")
+            raise Exception("Can not hadle bounding box and point at the same time.")
         
         if len(point_coords_list) == 0:
             mode = 'box'
@@ -207,7 +263,7 @@ def predict(input_dict, text):
 
         image_source_dino, image_dino = convert_image(img)
         if text != '' and mode == 'point':
-            gr.Warning("Both text and point prompt input, follow the point prompt")
+            print("Both text and point prompt input, follow the point prompt")
             
         boxes, logits, phrases = dino_predict(
             model=dino_model,
@@ -217,6 +273,7 @@ def predict(input_dict, text):
             text_threshold=TEXT_TRESHOLD,
             remove_combined=False,
         )
+
         h, w, _ = image_source_dino.shape
         boxes = boxes * torch.Tensor([w, h, w, h])
         xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy")
@@ -227,9 +284,8 @@ def predict(input_dict, text):
             elif mode == 'point':
                 pass
         
-
         if len(bbox_2d_list) == 0 and len(point_coords_list) == 0:
-            raise gr.Error("No objects found in the image. Please try again with a different prompt.")
+            raise Exception("No objects found in the image. Please try again with a different prompt.")
             
         raw_img = img.copy()
         original_size = tuple(img.shape[:-1])
@@ -255,7 +311,6 @@ def predict(input_dict, text):
         if mode == 'box':
             bbox_2d_tensor = torch.tensor(bbox_2d_list)
             bbox_2d_tensor = sam_trans.apply_boxes_torch(bbox_2d_tensor, original_size).to(torch.int).to('cuda:0')
-            print(bbox_2d_tensor.shape)
             input_dict = {
                 "images": img_for_sam,
                 'vit_pad_size': torch.tensor(vit_pad_size).to('cuda:0').unsqueeze(0),
@@ -264,7 +319,6 @@ def predict(input_dict, text):
                 "boxes_coords": bbox_2d_tensor,
             }
         if mode == 'point':
-
             points_2d_tensor = torch.stack(point_coords_list, dim=1).to('cuda:0')
             points_2d_tensor = sam_trans.apply_coords_torch(points_2d_tensor, original_size)
             input_dict = {
@@ -275,52 +329,132 @@ def predict(input_dict, text):
                 "point_coords": points_2d_tensor,
             }
 
-
         ret_dict = my_sam_model(input_dict)
 
         K = ret_dict['pred_K']
         decoded_bboxes_pred_2d, decoded_bboxes_pred_3d = decode_bboxes(ret_dict, cfg, K)
         rot_mat = rotation_6d_to_matrix(ret_dict['pred_pose_6d'])
-        pred_box_ious = ret_dict.get('pred_box_ious', None)
 
-        origin_img = torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1) * img_for_sam[0, :, :image_h, :image_w].squeeze(0).detach().cpu() + torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1)
-        todo = cv2.cvtColor(origin_img.permute(1, 2, 0).numpy(), cv2.COLOR_RGB2BGR)
-        K = K.detach().cpu().numpy()
+    return decoded_bboxes_pred_3d, rot_mat
+
+
+def predict_seg(input_dict, text):
+    with torch.no_grad():
+        img, points = input_dict['image'], input_dict['points']
+        image_token = generate_image_token(img)
+
+        pixels = np.array(img).reshape(-1, 3) / 255.0
+
+        # 改进点1：根据亮度加权采样（避免全随机选到过多暗色）
+        brightness = pixels.mean(axis=1)  # 计算每个像素的亮度
+        prob = brightness / brightness.sum()  # 亮度越高采样概率越大
+        sampled_indices = np.random.choice(pixels.shape[0], 100, p=prob, replace=False)
+        sampled_colors = pixels[sampled_indices]
+        # 改进点2：按亮度排序而非直接排序
+        sampled_colors = sorted(sampled_colors, key=lambda c: colorsys.rgb_to_hsv(*c)[2])
+        # 应用亮度增强
+        adjusted_colors = [adjust_brightness(c, factor=2.0, v_min=0.4) for c in sampled_colors]
+
+        if img is None:
+            raise Exception("No image received")
         
-        for i in range(len(decoded_bboxes_pred_2d)):
-            x, y, z, w, h, l, yaw = decoded_bboxes_pred_3d[i].detach().cpu().numpy()
-            rot_mat_i = rot_mat[i].detach().cpu().numpy()
-            vertices_3d, fore_plane_center_3d = compute_3d_bbox_vertices(x, y, z, w, h, l, yaw, rot_mat_i)
-            vertices_2d = project_to_image(vertices_3d, K.squeeze(0))
-            fore_plane_center_2d = project_to_image(fore_plane_center_3d, K.squeeze(0))
-            color = adjusted_colors[i]
+        label_list = []
+        bbox_2d_list = []
 
-            color = [min(255, c*255) for c in color]
+        image_source_dino, image_dino = convert_image(img)
+        boxes, logits, phrases = dino_predict(
+            model=dino_model,
+            image=image_dino,
+            caption=text,
+            box_threshold=BOX_TRESHOLD,
+            text_threshold=TEXT_TRESHOLD,
+            remove_combined=False,
+        )
+
+        h, w, _ = image_source_dino.shape
+        boxes = boxes * torch.Tensor([w, h, w, h])
+        xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy")
+        for i, box in enumerate(xyxy):
+            bbox_2d_list.append(box.to(torch.int).cpu().numpy().tolist())
+            label_list.append(phrases[i])
+        
+        if len(bbox_2d_list) == 0:
+            raise Exception("No objects found in the image. Please try again with a different prompt.")
+        
+        predictor.set_image(image_source_dino)
+        masks_result = []
+
+        for bbox in bbox_2d_list:
+            masks, _, _ = predictor.predict(box=np.array(bbox))
+            mask = np.zeros_like(masks[0])
+            for i in range(masks.shape[0]):
+                mask = mask | masks[i]
+            masks_result.append((mask.astype(np.uint8) * 255).tolist())
+
+    return masks_result
+
+
+# 配置参数
+SHM_SIZE = 1024 * 1024 * 512  # 10MB预留空间
+
+try:
+    # 服务端创建共享资源
+    print("[B] 初始化共享内存和信号量...")
+    SharedMemoryManager.cleanup_all() 
+    shm_img = SharedMemoryManager("image_data", SHM_SIZE, create=True, is_server=True)
+    shm_result = SharedMemoryManager("result_data", SHM_SIZE, create=True, is_server=True)
+
+    while True:
+        try:
+            # 等待客户端数据
+            print("\n[B] 等待客户端数据...")
+            data = shm_img.read_data()
             
-            best_j = torch.argmax(pred_box_ious[i])  # Get the index of the best IoU box
-            iou_score = pred_box_ious[i][best_j].item()  # Get the IoU score as a scalar
+            endpoint = data.get('endpoint', None)
+            
+            # 处理数据
+            print("[B] 处理图像中...")
+            input_dict = {
+                'image': data['image'],
+                'points': data.get('points', [])
+            }
+            text = data.get('text', '')
 
-            # Draw the 2D bounding box (predicted)
-            draw_bbox_2d(todo, vertices_2d, color=(int(color[0]), int(color[1]), int(color[2])), thickness=3)
-            if label_list[i] is not None:
-                draw_text(todo, f"{label_list[i]} {[round(c, 2) for c in decoded_bboxes_pred_3d[i][3:6].detach().cpu().numpy().tolist()]}", box_cxcywh_to_xyxy(decoded_bboxes_pred_2d[i]).detach().cpu().numpy().tolist(), scale=0.50*todo.shape[0]/500, bg_color=color)
-     
-        cv2.imwrite(f'./exps/deploy/{image_token}.jpg', todo)
-        todo = todo / 255
-        todo = np.clip(todo, -1.0, 1.0)
-        rgb_image = cv2.cvtColor(todo, cv2.COLOR_BGR2RGB)
-        
-    return rgb_image
+            if endpoint == "location_3d":
+                decoded_bboxes_pred_3d, rot_mat = predict_3d(input_dict, text)
+                result = {
+                    'bboxes_3d': decoded_bboxes_pred_3d,
+                    'rot_mat': rot_mat.tolist(),
+                    'text': text
+                }
+            elif endpoint == "location_2d":
+                bbox_2d_list, label_list = predict_2d(input_dict, text)
+                result = {
+                    'bboxes_2d': bbox_2d_list,
+                    'labels': label_list,
+                    'text': text
+                }
+            elif endpoint == "location_seg":
+                masks_result = predict_seg(input_dict, text)
+                result = {
+                    'masks': masks_result,
+                    'text': text
+                }
+            
+            # 返回结果
+            print("[B] 返回处理结果")
+            shm_result.write_data(result)
+            shm_result.notify_done()  # 通知客户端已完成
 
+        except KeyboardInterrupt:
+            print("\n[B] 收到终止信号，退出循环")
+            break
+        except Exception as e:
+            print(f"[B] 错误: {str(e)}")
+            shm_result.write_data({"error": str(e)})
+            shm_result.notify_done()
+            time.sleep(1)  # 错误恢复间隔
 
-iface = gr.Interface(
-    predict,
-    [ImagePrompter(show_label=False),
-    gr.Textbox(label="Please enter the prompt, e.g. a person, seperate different prompt with ' . '")],
-    outputs=[
-        gr.Image(),  # 图像输出
-    ]
-)
-
-# 启动 Gradio 应用
-iface.launch(share=True, server_port=7861)
+finally:
+    print("[B] 服务端退出")
+    sys.exit(0)

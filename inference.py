@@ -59,6 +59,7 @@ BOX_TRESHOLD = 0.37
 TEXT_TRESHOLD = 0.25
 
 import groundingdino.datasets.transforms as T
+
 def convert_image(img):
     transform = T.Compose(
         [
@@ -73,7 +74,6 @@ def convert_image(img):
     return image, image_transformed
 
 def crop_hw(img):
-        
     if img.dim() == 4:
         img = img.squeeze(0)
     h, w = img.shape[1:3]  # 假设形状为 [C, H, W]
@@ -304,7 +304,7 @@ def predict(input_dict, text):
             draw_bbox_2d(todo, vertices_2d, color=(int(color[0]), int(color[1]), int(color[2])), thickness=3)
             if label_list[i] is not None:
                 draw_text(todo, f"{label_list[i]} {[round(c, 2) for c in decoded_bboxes_pred_3d[i][3:6].detach().cpu().numpy().tolist()]}", box_cxcywh_to_xyxy(decoded_bboxes_pred_2d[i]).detach().cpu().numpy().tolist(), scale=0.50*todo.shape[0]/500, bg_color=color)
-     
+    
         cv2.imwrite(f'./exps/deploy/{image_token}.jpg', todo)
         todo = todo / 255
         todo = np.clip(todo, -1.0, 1.0)
@@ -312,15 +312,13 @@ def predict(input_dict, text):
         
     return rgb_image
 
+import time
+img = np.array(Image.open("./images/sofas.png"))[:, :, :-1]
 
-iface = gr.Interface(
-    predict,
-    [ImagePrompter(show_label=False),
-    gr.Textbox(label="Please enter the prompt, e.g. a person, seperate different prompt with ' . '")],
-    outputs=[
-        gr.Image(),  # 图像输出
-    ]
-)
-
-# 启动 Gradio 应用
-iface.launch(share=True, server_port=7861)
+input_dict = {}
+input_dict['image'] = img
+input_dict['points'] = []
+for i in range(100):
+    t = time.time()
+    predict(input_dict, "sofa")
+    print("Time taken:", time.time() - t)
